@@ -1,8 +1,8 @@
 # %%
-import polars as pl
+#import polars as pl
 import pandas as pd
 import streamlit as st
-import pyarrow.dataset as ds
+#import pyarrow.dataset as ds
 
 # %%
 st.set_page_config(
