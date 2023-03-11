@@ -2,7 +2,11 @@
 #import polars as pl
 import pandas as pd
 import streamlit as st
-#import pyarrow.dataset as ds
+import pyarrow.parquet as pq
+import pyarrow.compute as pc
+import os
+os.chdir("C:/Users/SQLe/U.S. Small Business Administration/Office of Policy Planning and Liaison (OPPL) - Data Lake/")
+
 
 # %%
 st.set_page_config(
@@ -13,41 +17,37 @@ st.set_page_config(
 )
 
 # %% 
-#datasets and functions
-
 @st.cache_data
-def get_CY_double(year_to_run):
-    # arrowds2=ds.dataset("./Double_Credit/FY"+year_to_run.replace("20","")+"_Double_Credit.parquet",format="parquet")
-    # SBGR_DC=pl.scan_ds(arrowds2)
-    # CY_double=SBGR_DC.select(
-    #     "FUNDING_DEPARTMENT_NAME","FUNDING_AGENCY_NAME"
-    #     ,"TOTAL_SB_ACT_ELIGIBLE_DOLLARS","SMALL_BUSINESS_DOLLARS","SDB_DOLLARS","WOSB_DOLLARS","CER_HUBZONE_SB_DOLLARS","SRDVOB_DOLLARS")
-    # CY_double_sum=CY_double.groupby(["FUNDING_DEPARTMENT_NAME","FUNDING_AGENCY_NAME"]).sum()
-    # return CY_double_sum.collect().to_pandas()
-    return pd.read_parquet("CY_double.parquet")
+def get_data(year_to_run):
+#year_to_run="2022"
+    PY_pos=pq.ParquetDataset("./SBGR_parquet/SBGR_FY"+str(int(year_to_run)-1),
+                    filters=[('TOTAL_SB_ACT_ELIGIBLE_DOLLARS','>',0)])
+    CY_pos=pq.ParquetDataset("./Double_Credit/FY_22.parquet"
+                    ,filters=[('TOTAL_SB_ACT_ELIGIBLE_DOLLARS','>',0)])
+    CY_neg=pq.ParquetDataset("./Double_Credit/FY_22.parquet"
+                    ,filters=[('TOTAL_SB_ACT_ELIGIBLE_DOLLARS','<',0)])
 
-@st.cache_data
-def get_CY_adjust(year_to_run):
-    # arrowds=ds.dataset("./SBGR_parquet/SBGR_FY"+str(int(year_to_run)-1),format="parquet")
-    # SBGR=pl.scan_ds(arrowds)
-    # arrowds2=ds.dataset("./Double_Credit/FY"+year_to_run.replace("20","")+"_Double_Credit.parquet",format="parquet")
-    # SBGR_DC=pl.scan_ds(arrowds2)
-    # PY_pos=SBGR.filter(pl.col("TOTAL_SB_ACT_ELIGIBLE_DOLLARS")>0).select(
-    #     "IDV_PIID","PIID","FUNDING_DEPARTMENT_ID").unique().sort(["FUNDING_DEPARTMENT_ID","IDV_PIID","PIID"]).fill_null("~")
-    # CY_pos=SBGR_DC.filter(pl.col("TOTAL_SB_ACT_ELIGIBLE_DOLLARS")>0).select(
-    #     "IDV_PIID","PIID","FUNDING_DEPARTMENT_ID").unique().sort(["FUNDING_DEPARTMENT_ID","IDV_PIID","PIID"]).fill_null("~")
-    # CY_neg=SBGR_DC.filter(pl.col("TOTAL_SB_ACT_ELIGIBLE_DOLLARS")<0).select(
-    #     "IDV_PIID","PIID"
-    #     ,"FUNDING_DEPARTMENT_NAME","FUNDING_DEPARTMENT_ID","FUNDING_AGENCY_NAME"
-    #     ,"TOTAL_SB_ACT_ELIGIBLE_DOLLARS","SMALL_BUSINESS_DOLLARS","SDB_DOLLARS","WOSB_DOLLARS","CER_HUBZONE_SB_DOLLARS","SRDVOB_DOLLARS"
-    #     ).sort(["FUNDING_DEPARTMENT_ID","IDV_PIID","PIID"]).fill_null("~")
-    # CY_neg_anti=CY_neg.join(PY_pos,how="anti",on=["FUNDING_DEPARTMENT_ID","IDV_PIID","PIID"])
-    # CY_neg_anti=CY_neg_anti.join(CY_pos,how="anti",on=["FUNDING_DEPARTMENT_ID","IDV_PIID","PIID"])
-    # CY_neg_sum=CY_neg_anti.select(pl.col(["FUNDING_DEPARTMENT_NAME","FUNDING_AGENCY_NAME"
-    #                                         ,"TOTAL_SB_ACT_ELIGIBLE_DOLLARS","SMALL_BUSINESS_DOLLARS","SDB_DOLLARS","WOSB_DOLLARS","CER_HUBZONE_SB_DOLLARS","SRDVOB_DOLLARS"
-    #                                         ])).groupby(["FUNDING_DEPARTMENT_NAME","FUNDING_AGENCY_NAME"]).sum()
-    # return CY_neg_sum.collect().to_pandas()
-    return pd.read_parquet("CY_adjust.parquet")
+    matchcols=["IDV_PIID","PIID","FUNDING_DEPARTMENT_ID"]
+    detailcols=["FUNDING_DEPARTMENT_NAME","FUNDING_AGENCY_NAME","FUNDING_AGENCY_ID"]
+    dolcols=["TOTAL_SB_ACT_ELIGIBLE_DOLLARS","SMALL_BUSINESS_DOLLARS","SDB_DOLLARS","WOSB_DOLLARS","CER_HUBZONE_SB_DOLLARS","SRDVOB_DOLLARS"]
+    PYposDF=PY_pos.read(columns=matchcols).to_pandas()
+    CYposDF=CY_pos.read(columns=matchcols+detailcols+dolcols).to_pandas()
+    CYnegDF=CY_neg.read(columns=matchcols+detailcols+dolcols).to_pandas()
+
+    compareDF=CYposDF[matchcols].merge(PYposDF,how="outer",indicator=True).drop_duplicates()
+    compareDF["match"]=compareDF["_merge"].replace({'left_only':'2022+','right_only':'2021+'},)
+    compareDF.drop("_merge",axis=1,inplace=True)
+
+    CYnegDF=CYnegDF.merge(compareDF,how="left",on=matchcols,indicator=True,copy=False)
+
+    CYnegDF["STATUS"]=CYnegDF["_merge"].replace({'left_only':'exclude','both':'include'})
+    CYnegDF.drop("_merge",axis=1,inplace=True)
+
+    #CYnegDF.to_parquet("CYnegDF.parquet")
+    CYpossum=CYposDF.groupby(["FUNDING_DEPARTMENT_NAME","FUNDING_DEPARTMENT_ID","FUNDING_AGENCY_NAME","FUNDING_AGENCY_ID"]
+                            ,as_index=False)[dolcols].sum()
+    #CYpossum.to_parquet("CYpossum.parquet")
+    return CYnegDF, CYpossum
     
 
 # %% 
@@ -55,11 +55,7 @@ def get_CY_adjust(year_to_run):
 st.title("Deobligations Dashboard")
 year_to_run=st.sidebar.selectbox(label="Fiscal Year",options=(['2022'])) #enable more years here
 
-CY_double=get_CY_double(year_to_run)
-#CY_double.to_parquet("./Streamlit/Deobligations/CY_double.parquet") #COMMENT OUT
-CY_adjust=get_CY_adjust(year_to_run)
-#CY_adjust.to_parquet("./Streamlit/Deobligations/CY_adjust.parquet") #COMMENT OUT
-
+CY_neg,CY_pos =get_data(year_to_run)
 
 # %% 
 #User input - Department - Agency
@@ -74,7 +70,7 @@ Department=st.sidebar.selectbox(label="Department",options=('GOV-WIDE'
           ,'TRANSPORTATION, DEPARTMENT OF', 'TREASURY, DEPARTMENT OF THE', 'VETERANS AFFAIRS, DEPARTMENT OF'))
 if Department != 'GOV-WIDE':
     Agency_select=pd.concat([pd.Series("DEPT-WIDE")
-                             ,CY_double[CY_double['FUNDING_DEPARTMENT_NAME']==Department][
+                             ,CY_pos[CY_pos['FUNDING_DEPARTMENT_NAME']==Department][
         "FUNDING_AGENCY_NAME"].drop_duplicates().sort_values()])
     Agency=st.sidebar.selectbox(label="Agency",options=Agency_select)
 
@@ -83,18 +79,20 @@ if Department != 'GOV-WIDE':
 dolcols=["TOTAL_SB_ACT_ELIGIBLE_DOLLARS","SMALL_BUSINESS_DOLLARS","SDB_DOLLARS","WOSB_DOLLARS","CER_HUBZONE_SB_DOLLARS","SRDVOB_DOLLARS"]
 
 if Department == 'GOV-WIDE':
-    SR_all=CY_double[dolcols].sum()
-    SR_DX=SR_all.subtract(CY_adjust[dolcols].sum())
+    SR_pos=CY_pos[dolcols].sum()
+    SR_neg_all=CY_neg[dolcols].sum()
+    SR_neg_incl=CY_neg[CY_neg['STATUS']=="include"][dolcols].sum()
 elif Agency == 'DEPT-WIDE':
-    SR_all=CY_double[CY_double["FUNDING_DEPARTMENT_NAME"]==Department][dolcols].sum()
-    SR_DX=SR_all.subtract(
-    CY_adjust[CY_adjust["FUNDING_DEPARTMENT_NAME"]==Department][dolcols].sum()
-    )
+    SR_pos=CY_pos[CY_pos["FUNDING_DEPARTMENT_NAME"]==Department][dolcols].sum()
+    SR_neg_all=CY_neg[CY_neg["FUNDING_DEPARTMENT_NAME"]==Department][dolcols].sum()
+    SR_neg_incl=CY_neg[CY_neg["FUNDING_DEPARTMENT_NAME"]==Department][CY_neg['STATUS']=="include"][dolcols].sum()
 else: 
-    SR_all=CY_double[(CY_double["FUNDING_AGENCY_NAME"]==Agency) & (CY_double["FUNDING_DEPARTMENT_NAME"]==Department)][dolcols].sum()
-    SR_DX=SR_all.subtract(
-        CY_adjust[(CY_adjust["FUNDING_AGENCY_NAME"]==Agency) & (CY_adjust["FUNDING_DEPARTMENT_NAME"]==Department)][dolcols].sum()
-        )
+    SR_pos=CY_pos[(CY_pos["FUNDING_AGENCY_NAME"]==Agency) & (CY_pos["FUNDING_DEPARTMENT_NAME"]==Department)][dolcols].sum()
+    SR_neg_all=CY_neg[(CY_neg["FUNDING_AGENCY_NAME"]==Agency) & (CY_neg["FUNDING_DEPARTMENT_NAME"]==Department)][dolcols].sum()
+    SR_neg_incl=CY_neg[(CY_neg["FUNDING_AGENCY_NAME"]==Agency) & (CY_neg["FUNDING_DEPARTMENT_NAME"]==Department)][CY_neg['STATUS']=="include"][dolcols].sum()
+
+SR_all=SR_pos + SR_neg_all
+SR_DX=SR_pos + SR_neg_incl
 
 
 # %%
@@ -134,61 +132,19 @@ st.write("With Deobligations Excluded based on [SBA's June 2022 Federal Register
 st.write(styler(DF_DX).to_html(),unsafe_allow_html=True)
 
 #%%
-@st.cache_data
-def download(Department, Agency,year_to_run):
-    download=pd.read_parquet("download.parquet")
-    download=download[download["FUNDING_DEPARTMENT_NAME"]==Department]
-    if Agency!="DEPT-WIDE":
-        download=download[download["FUNDING_AGENCY_NAME"]==Agency]
-    return download
-
-    # arrowds=ds.dataset("./SBGR_parquet/SBGR_FY"+str(int(year_to_run)-1),format="parquet")
-    # SBGR=pl.scan_ds(arrowds)
-    # arrowds2=ds.dataset("./Double_Credit/FY"+year_to_run.replace("20","")+"_Double_Credit.parquet",format="parquet")
-    # SBGR_DC=pl.scan_ds(arrowds2)
-
-    # PY_pos=SBGR.filter(pl.col("TOTAL_SB_ACT_ELIGIBLE_DOLLARS")>0
-    #                     #).filter(pl.col("FUNDING_DEPARTMENT_NAME")==Department
-    #     ).select(
-    #     "IDV_PIID","PIID","FUNDING_DEPARTMENT_ID","FUNDING_AGENCY_NAME").unique().sort(["FUNDING_DEPARTMENT_ID","IDV_PIID","PIID"])
-    # CY_pos=SBGR_DC.filter(pl.col("TOTAL_SB_ACT_ELIGIBLE_DOLLARS")>0
-    #                         #).filter((pl.col("FUNDING_DEPARTMENT_NAME")==Department)
-    #                     ).select(
-    #     "IDV_PIID","PIID","FUNDING_DEPARTMENT_ID","FUNDING_AGENCY_NAME").unique().sort(["FUNDING_DEPARTMENT_ID","IDV_PIID","PIID"])
-    # CY_neg=SBGR_DC.filter(pl.col("TOTAL_SB_ACT_ELIGIBLE_DOLLARS")<0
-    #                         #).filter(pl.col("FUNDING_DEPARTMENT_NAME")==Department
-    #                     ).select(
-    #     "IDV_PIID","PIID","DATE_SIGNED"
-    #     ,"FUNDING_DEPARTMENT_NAME","FUNDING_DEPARTMENT_ID","FUNDING_AGENCY_NAME","FUNDING_AGENCY_ID"
-    #     ,"TOTAL_SB_ACT_ELIGIBLE_DOLLARS","SMALL_BUSINESS_DOLLARS","SDB_DOLLARS","WOSB_DOLLARS","CER_HUBZONE_SB_DOLLARS","SRDVOB_DOLLARS"
-    #     ).sort(["FUNDING_DEPARTMENT_ID","IDV_PIID","PIID"])
-
-    # if Agency!="DEPT-WIDE":
-    #     PY_pos=PY_pos.filter(pl.col("FUNDING_AGENCY_NAME")==Agency)
-    #     CY_pos=CY_pos.filter(pl.col("FUNDING_AGENCY_NAME")==Agency)
-    #     CY_neg=CY_neg.filter(pl.col("FUNDING_AGENCY_NAME")==Agency)
-            
-    # CY_neg_anti=CY_neg.join(PY_pos,how="anti",on=["FUNDING_DEPARTMENT_ID","IDV_PIID","PIID"]).sort("DATE_SIGNED")
-    # CY_neg_anti=CY_neg_anti.join(CY_pos,how="anti",on=["FUNDING_DEPARTMENT_ID","IDV_PIID","PIID"]).sort("DATE_SIGNED").with_columns([pl.lit("Excluded").alias("STATUS")])
-
-    # CY_neg_inner=CY_neg.join(CY_neg_anti,how="anti",on=["FUNDING_DEPARTMENT_ID","IDV_PIID","PIID"]).sort("DATE_SIGNED").with_columns([pl.lit("Included").alias("STATUS")])
-
-    # download=pl.concat([CY_neg_inner,CY_neg_anti],how="vertical") 
-    # download.collect().write_parquet("download.parquet") #COMMENT OUT 
-    # return download.collect().to_pandas()
-
 #%%
 st.caption("     Department: " + Department)
 if Department != 'GOV-WIDE':
     st.caption("     Agency: " + Agency)
-    if st.checkbox("Show Options to Download Transactions"):
-        download=download(Department, Agency,year_to_run)
-        includeDL=download[download["STATUS"]=="Included"].to_csv(index=False)
-        excludeDL=download[download["STATUS"]=="Excluded"].to_csv(index=False)
-        st.download_button(label="Download Included Deobligations"
-        ,data=includeDL
-        ,file_name=(Department+"-"+Agency+"-included_deobligations.csv"))
-        st.download_button(label="Download Excluded Deobligations"
-        ,data=excludeDL
-        ,file_name=(Department+"-"+Agency+"-excluded_deobligations.csv"))
+    if Agency != 'DEPT-WIDE':download=CY_neg[(CY_neg["FUNDING_AGENCY_NAME"]==Agency) & (CY_neg["FUNDING_DEPARTMENT_NAME"]==Department)]
+    else: download=CY_neg[(CY_neg["FUNDING_DEPARTMENT_NAME"]==Department)]
+
+    includeDL=download[download["STATUS"]=="include"].to_csv(index=False)
+    excludeDL=download[download["STATUS"]=="exclude"].to_csv(index=False)
+    st.download_button(label="Download Included Deobligations"
+    ,data=includeDL
+    ,file_name=(Department+"-"+Agency+"-included_deobligations.csv"))
+    st.download_button(label="Download Excluded Deobligations"
+    ,data=excludeDL
+    ,file_name=(Department+"-"+Agency+"-excluded_deobligations.csv"))
 # %%
