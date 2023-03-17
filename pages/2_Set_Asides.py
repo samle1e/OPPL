@@ -1,11 +1,11 @@
 #%%
 import pandas as pd
-import polars as pl
+#import polars as pl
 import streamlit as st
 import plotly.express as px
-import pyarrow.dataset as ds
-import pyarrow as pa
-import os
+#import pyarrow.dataset as ds
+#import pyarrow as pa
+#import os
 
 st.set_page_config(
     page_title="SBA Set-Aside Tracker",
@@ -14,15 +14,15 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-os.chdir("C:/Users/SQLe/Data/")
+#os.chdir("C:/Users/SQLe/Data/")
 #%%
 #define my datasets
-SBGRdir="./SBGR_final/"
-list=sorted([file for file in os.listdir(SBGRdir)])
-#max_year=list[-1].replace("SBGR_FY","")
-#%%
-arrowds=ds.dataset(SBGRdir,partitioning=ds.partitioning(pa.schema([("FY", pa.int16())]),flavor="hive"))
-pldata=pl.scan_pyarrow_dataset(arrowds)
+
+# SBGRdir="./SBGR_final/"
+# list=sorted([file for file in os.listdir(SBGRdir)])
+
+# arrowds=ds.dataset(SBGRdir,partitioning=ds.partitioning(pa.schema([("FY", pa.int16())]),flavor="hive"))
+# pldata=pl.scan_pyarrow_dataset(arrowds)
 
 #%%
 SBA_set_asides=["SBA", "8AN", "SDVOSBC" ,"8A", "HZC","SBP","WOSB","SDVOSBS","RSB","HZS","EDWOSB"
@@ -33,61 +33,63 @@ entitycols=['INDIAN_TRIBE','TRIBALLY_OWNED','ALASKAN_NATIVE_CORPORATION','AIOB_F
 doublecols=['VENDOR_ADDRESS_STATE_NAME','LOCAL_AREA_SET_ASIDE','CO_BUS_SIZE_DETERMINATION']
 contractctcols=['MODIFICATION_NUMBER','AWARD_OR_IDV','MULTIPLE_OR_SINGLE_AWARD_IDC','IDV_MUL_OR_SINGLE_AWARD_IDC','IDV_MUL_OR_SINGLE_COMP','ULTIMATE_CONTRACT_VALUE']
 
-#%%
-all_data=pldata.select(basiccols
-		           + dolcols + entitycols + doublecols)
-
-#%%
-all_data=all_data.with_columns([pl.when(
-	pl.col('VENDOR_ADDRESS_STATE_NAME').str.contains("PUERTO RICO") & (pl.col('FY')==2019))
-          .then('PUERTO RICO')
-          .when((pl.col('VENDOR_ADDRESS_STATE_NAME').str.contains("PUERTO RICO|GUAM|VIRGIN ISLANDS|SAMOA|MARIANAS"))& (pl.col('FY')>=2020)& (pl.col('FY')<2023))
-          .then ('YES') #('TERRITORY')
-          .when((pl.col('LOCAL_AREA_SET_ASIDE')=="Y") & (pl.col('CO_BUS_SIZE_DETERMINATION')=="SMALL BUSINESS") & (pl.col('FY')>=2020))
-          .then('YES') #('LOCAL')
-  	    .otherwise("NO")
-          .alias("double")
-])
-				   
-#%%
-set_aside_table=all_data.filter(pl.col("TYPE_OF_SET_ASIDE").is_in(SBA_set_asides) | pl.col("IDV_TYPE_OF_SET_ASIDE").is_in(SBA_set_asides)).select(
-      basiccols+entitycols+["double"]
-		           + dolcols)
-#%%
 SBA_socio_asides=["8AN", "SDVOSBC" ,"8A", "HZC","WOSB","SDVOSBS","HZS","EDWOSB"
 ,"WOSBSS","ESB","HS3","EDWOSBSS"]
 
-set_aside_table=set_aside_table.with_columns(
-	[pl.when(pl.col('TYPE_OF_SET_ASIDE').is_in(SBA_socio_asides))
-          .then(pl.col('TYPE_OF_SET_ASIDE'))
-          .when(pl.col('IDV_TYPE_OF_SET_ASIDE').is_in(SBA_set_asides))
-          .then(pl.col('IDV_TYPE_OF_SET_ASIDE'))
-          .otherwise(pl.col('TYPE_OF_SET_ASIDE'))
-          .alias("set_aside")
-      ,pl.when(pl.col('NATIVE_HAWAIIAN_ORGANIZATION')=="YES")
-	    .then('YES') #('NHO')
-          .when(pl.col('ALASKAN_NATIVE_CORPORATION')=="YES")
-          .then('YES') #('ANC')
-          .when((pl.col('INDIAN_TRIBE')=="YES") | (pl.col('TRIBALLY_OWNED')=="YES") | (pl.col('AIOB_FLAG')=="YES"))
-          .then('YES') #('Tribe')
-          .otherwise("NO")
-          .alias("entity")
-          ])
+#%%
+# all_data=pldata.select(basiccols
+# 		           + dolcols + entitycols + doublecols)
+
+# all_data=all_data.with_columns([pl.when(
+# 	pl.col('VENDOR_ADDRESS_STATE_NAME').str.contains("PUERTO RICO") & (pl.col('FY')==2019))
+#           .then('PUERTO RICO')
+#           .when((pl.col('VENDOR_ADDRESS_STATE_NAME').str.contains("PUERTO RICO|GUAM|VIRGIN ISLANDS|SAMOA|MARIANAS"))& (pl.col('FY')>=2020)& (pl.col('FY')<2023))
+#           .then ('YES') #('TERRITORY')
+#           .when((pl.col('LOCAL_AREA_SET_ASIDE')=="Y") & (pl.col('CO_BUS_SIZE_DETERMINATION')=="SMALL BUSINESS") & (pl.col('FY')>=2020))
+#           .then('YES') #('LOCAL')
+#   	    .otherwise("NO")
+#           .alias("double")
+# ])
+				   
+# set_aside_table=all_data.filter(pl.col("TYPE_OF_SET_ASIDE").is_in(SBA_set_asides) | pl.col("IDV_TYPE_OF_SET_ASIDE").is_in(SBA_set_asides)).select(
+#       basiccols+entitycols+["double"]
+# 		           + dolcols)
+
+# set_aside_table=set_aside_table.with_columns(
+# 	[pl.when(pl.col('TYPE_OF_SET_ASIDE').is_in(SBA_socio_asides))
+#           .then(pl.col('TYPE_OF_SET_ASIDE'))
+#           .when(pl.col('IDV_TYPE_OF_SET_ASIDE').is_in(SBA_set_asides))
+#           .then(pl.col('IDV_TYPE_OF_SET_ASIDE'))
+#           .otherwise(pl.col('TYPE_OF_SET_ASIDE'))
+#           .alias("set_aside")
+#       ,pl.when(pl.col('NATIVE_HAWAIIAN_ORGANIZATION')=="YES")
+# 	    .then('YES') #('NHO')
+#           .when(pl.col('ALASKAN_NATIVE_CORPORATION')=="YES")
+#           .then('YES') #('ANC')
+#           .when((pl.col('INDIAN_TRIBE')=="YES") | (pl.col('TRIBALLY_OWNED')=="YES") | (pl.col('AIOB_FLAG')=="YES"))
+#           .then('YES') #('Tribe')
+#           .otherwise("NO")
+#           .alias("entity")
+#           ])
+
 #%%
 @st.cache_data
 def get_set_aside_data():
-      groupcols=["FY",'FUNDING_DEPARTMENT_NAME','FUNDING_AGENCY_NAME',"double"]
-      set_aside_sum=set_aside_table.groupby(["set_aside","entity"]+groupcols,maintain_order=True).sum().collect().to_pandas()
-      return set_aside_sum
+      # groupcols=["FY",'FUNDING_DEPARTMENT_NAME','FUNDING_AGENCY_NAME',"double"]
+      # set_aside_sum=set_aside_table.groupby(["set_aside","entity"]+groupcols,maintain_order=True).sum().collect().to_pandas()
+      # return set_aside_sum
+      return pd.read_parquet("set_aside_sum.parquet")
 
 @st.cache_data
 def get_all_sum():
-      groupcols=["FY",'FUNDING_DEPARTMENT_NAME','FUNDING_AGENCY_NAME',"double"]
-      all_sum=all_data.select(basiccols+["double"]+ dolcols).groupby(groupcols,maintain_order=True).sum().collect().to_pandas()
-      return all_sum
+      # groupcols=["FY",'FUNDING_DEPARTMENT_NAME','FUNDING_AGENCY_NAME',"double"]
+      # all_sum=all_data.select(basiccols+["double"]+ dolcols).groupby(groupcols,maintain_order=True).sum().collect().to_pandas()
+      # return all_sum
+      return pd.read_parquet("allsum.parquet")
 
 set_aside_sum=get_set_aside_data()
-
+#%%
+# set_aside_sum.to_parquet("set_aside_sum")
 #%% dictionaries
 
 def dict_to_list(dict):
@@ -163,14 +165,6 @@ if DorP=='Percentage':
       denom_select=st.sidebar.radio("As a percentage of what (i.e., denominator)?",(dollars_types))
       double_credit=st.sidebar.checkbox("Apply Scorecard Double Credit?")
 
-#%%
-### For testing
-# select_set_aside=["HUBZone Set-Aside","HUBZone Sole Source"]
-# entity=False
-# DorP='Percentage'
-# select_department="GOV-WIDE"
-# Agency="DEPT-WIDE"
-
 # %%
 #sum for dollars
 def filters(sumDF, select_department, Agency):
@@ -212,6 +206,10 @@ except:
 set_aside_sum_select=set_aside_sum_select[set_aside_sum_select['set_aside'].isin(select_set_aside)].groupby(
       ["FY"])[denom_select].sum()
 set_aside_sum_select.rename("Set-Aside Dollars",inplace=True)
+#%%
+# all_sum=get_all_sum()
+# all_sum.to_parquet("allsum.parquet")
+
 
 #%%
 ##tables
