@@ -195,7 +195,6 @@ def double_creditDF(selectDF,denom_select):
 
       return selectDF
 #%%
-#double_credit=True
 #group and aggregate the result depending on whether we are applying double-credit
 try:
       if (double_credit):
@@ -221,7 +220,7 @@ if DorP=='Percentage':
       all_sum_select=filters(all_sum, select_department, Agency)
       all_sum_select.rename(columns=dollars_dict,inplace=True)
       try: 
-            if (double_credit):
+            if ((double_credit) & (denom_select != "Total Dollars")):
                   all_sum_select=double_creditDF(all_sum_select,denom_select)
       except:pass
       all_sum_select=all_sum_select.groupby(["FY"])[denom_select].sum()
@@ -255,10 +254,10 @@ def stylerDollars(DF):
 st.plotly_chart(fig)
 
 if DorP=='Dollars':
-      st.write(displayDF.reset_index().style.format({col1: '${:,.0f}'}).hide_index().to_html(
+      st.write(displayDF.reset_index().style.format({col1: '${:,.0f}'}).hide(axis="index").to_html(
       ),unsafe_allow_html=True)
 else:
-      st.write(displayDF.reset_index().style.format({col1: '${:,.0f}',col2: '{:.2f}%'}).hide_index().to_html(
+      st.write(displayDF.reset_index().style.format({col1: '${:,.0f}',col2: '{:.2f}%'}).hide(axis="index").to_html(
       ),unsafe_allow_html=True)
 
 # %%
