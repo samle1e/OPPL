@@ -10,6 +10,7 @@ from snowflake.snowpark.functions import lit
 import re
 from io import StringIO
 from datetime import datetime
+from snowflake.snowpark.functions import max
 
 page_title= "SBGR Vendor Lookup"
 st.set_page_config(
@@ -27,12 +28,8 @@ def connect_and_get_data ():
 
     data1 = session.table("SMALL_BUSINESS_GOALING")
 
-    from snowflake.snowpark.functions import max
-    last_fy = data1.select(max(col("FISCAL_YEAR"))).to_pandas().iloc[0,0]
-    last_fy = int(last_fy)
-
     data2 = session.table("ATOM")
-    data2 = data2.filter(col("DATE_SIGNED") > datetime (last_fy, 9, 30, 0, 0))
+#    data2 = data2.filter(col("DATE_SIGNED") > datetime (last_fy, 9, 30, 0, 0))
 
     return data1, data2
 
@@ -94,10 +91,16 @@ def vendor_id (data1, data2):
 
     #filter the datasets
     if (len(UEI_list)>0) | (len(DUNS_list)>0):
+        last_fy = data1.select(max(col("FISCAL_YEAR"))).to_pandas().iloc[0,0]
+        last_fy = int(last_fy)
+
         df_for_in = session.create_dataframe(UEI_list + DUNS_list, schema=["col1"])
         data1=data1.filter((data1["VENDOR_UEI"].isin(df_for_in)) | 
                      (data1["VENDOR_DUNS_NUMBER"].isin(df_for_in)))
-        data2=data2.filter(data2["VENDOR_UEI_NUMBER"].isin(df_for_in))
+
+
+        data2=data2.filter((col("DATE_SIGNED") > datetime (last_fy, 9, 30, 0, 0)) &
+                            (data2["VENDOR_UEI_NUMBER"].isin(df_for_in)))
     else:
         data1 = None
         data2 = None
