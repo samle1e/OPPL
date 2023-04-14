@@ -4,3 +4,4 @@ streamlit
 plotly
 snowflake
 snowflake-snowpark-python
+snowflake-connector-python
