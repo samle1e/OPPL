@@ -70,7 +70,7 @@ def vendor_id (data1, data2):
 
     if try_DUNS or try_UEI:
         #attempt to match DUNS and UEIs if the user requested
-        DUNS_UEI_match = pd.read_csv(f"{datalake}/Mapping Files/DUNS_UEI_crosswalk.csv",converters=({"DUNS":str}))
+        DUNS_UEI_match = pd.read_csv("DUNS_UEI_crosswalk.csv",converters=({"DUNS":str}))
 
         def match_id (id_type, lst):        
             match_df = DUNS_UEI_match.loc[DUNS_UEI_match[id_type].isin(lst)
@@ -199,6 +199,7 @@ def download_option (data_filter1, data_filter2):
         data1=data_filter1.select(vendorcols1 + agencycols + contract_cols + dolcols)
         data_df = data1.to_pandas()
         data_df["VENDOR_NAME"] = data_df["VENDOR_NAME"].fillna(data_df["UEI_NAME"])
+        data_df.drop(["UEI_NAME"],axis=1,inplace=True)
 
     if data_filter2.count()>0:
         data2 = data_filter2.select(vendorcols2 + agencycols + contract_cols + dolcols)
