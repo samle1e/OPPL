@@ -187,7 +187,6 @@ def show_FY_graph_table_set_asides (data_filter1, data_filter2):
     st.write("")
     
 #%%
-@st.cache_data
 def download_option (data_filter1, data_filter2):
     vendorcols1 = ["VENDOR_DUNS_NUMBER","VENDOR_NAME","VENDOR_UEI","UEI_NAME"]
     vendorcols2 = ["VENDOR_UEI_NUMBER","VENDOR_NAME"]
