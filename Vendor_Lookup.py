@@ -224,3 +224,5 @@ if __name__ == '__main__':
     if any([data1, data2]):
         show_FY_graph_table_set_asides (data1, data2)
         download_option (data1, data2)
+    
+    st.caption("Source: SBA Small Business Goaling Report for FY09-FY22; ATOM Feed for later data")
