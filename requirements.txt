@@ -2,3 +2,4 @@ polars
 pandas
 streamlit
 plotly
+snowflake

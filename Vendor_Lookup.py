@@ -11,25 +11,16 @@ import re
 from io import StringIO
 from datetime import datetime
 
+page_title= "SBGR Vendor Lookup"
+st.set_page_config(
+    page_title= page_title,
+    page_icon="https://www.sba.gov/brand/assets/sba/img/pages/logo/logo.svg",
+    layout="wide",
+    initial_sidebar_state="expanded")
 
 #%% connect to snowflake
 def connect_and_get_data ():
-    datalake="C:\\Users\\SQLe\\U.S. Small Business Administration\\Office of Policy Planning and Liaison (OPPL) - Data Lake\\"
-
-    credentials = open(f"{datalake}/Credentials/Snowflake.txt","r").read()
-    myaccount=credentials.split(sep="\n")[0].split(":")[2].split(".")[0].strip("//")
-    username=credentials.split(sep="\n")[1].split(":")[1]
-    mypassword=credentials.split(sep="\n")[2].split(":")[1]
-
-    connection_parameters = {
-        "account": myaccount,
-        "user": username,
-        "password": mypassword,
-        "role": "SYSADMIN",  
-        "warehouse": "SBA_US-EAST-1_DEMO_WAREHOUSE", 
-        "database": "SBA_US-EAST-1_DEMO_RAW_DB",  
-        "schema": "DATA_HUB",  
-    }  
+    connection_parameters = st.secrets.snowflake_credentials
 
     global session
     session = sp.Session.builder.configs(connection_parameters).create()
@@ -45,8 +36,7 @@ def connect_and_get_data ():
 
     return data1, data2
 
-connect_and_get_data()
-
+data1, data2 = connect_and_get_data ()
 #%% user input and filter
 def vendor_id (data1, data2):
     #user selection
@@ -63,7 +53,10 @@ def vendor_id (data1, data2):
         Id_select=Id_select.replace(" ","")
         filter_list=re.split(",|\n",Id_select)
 
+#    uploaded_file = ("C:\\Users\\SQLe\\OneDrive - U.S. Small Business Administration\\HUBZoneFirmsSearch.txt")   
     if uploaded_file:
+      #  with open(uploaded_file, 'r') as file:
+      #      string_data = file.read()
         stringio = StringIO(uploaded_file.getvalue().decode("utf-8"))
         string_data = stringio.read()
         string_format=string_data.replace(" ","")
@@ -109,13 +102,40 @@ def vendor_id (data1, data2):
         data1 = None
         data2 = None
     return data1, data2
+#%%
 
 def show_FY_graph_table_set_asides (data_filter1, data_filter2):
     #
-    SBA_set_asides=["SBA", "SBP","RSB","8AN", "SDVOSBC" ,"8A", "HZC","WOSB","SDVOSBS","HZS","EDWOSB"
-    ,"WOSBSS","ESB","HS3","EDWOSBSS"]
-    SBA_socio_asides = SBA_set_asides[3:]
+    set_aside_dict = {'SBP':'Partial Small Business Set-Aside',
+                    'SBA':'Small Business Set Aside',
+                    '8AN':'8(a) Sole Source',
+                    'HS3':'8(a) with HUB Zone Preference',
+                    '8A':'8(a) Competed',
+                    'HZC':'HUBZone Set-Aside',
+                    'HZS':'HUBZone Sole Source',
+                    'SDVOSBS':'SDVOSB Sole Source',
+                    'SDVOSBC':'Service Disabled VOSB Set-Aside',
+                    'WOSB':'Women Owned Small Business',
+                    'EDWOSB':'EDWOSB Sole Source',
+                    'WOSBSS':'Women Owned Small Business Sole Source',
+                    'EDWOSBSS':'EDWOSB Sole Source',
 
+                    'BI':'Buy Indian',
+                    'IEE':'Indian Economic Enterprise',
+                    'ISBEE':'Indian Small Business Economic Enterprise',
+                    'ESB':'Emerging Small Business Set-Aside',
+                    'HMP':'HBCU or MI Set-Aside -- Partial',
+                    'HMT':'HBCU or MI Set-Aside -- Total',
+                    'HMT':'HBCU or MI Set-Aside -- Total',
+                    'NONE':'No set aside',
+                    'VSB':'Very Small Business Set Aside',
+                    'VSA':'Veteran Set Aside',
+                    'VSS':'Veteran Sole Source',
+ }
+    set_aside_dict.setdefault('missing_key', 'No set aside')
+    SBA_set_asides = list(set_aside_dict.keys())[:12]
+    SBA_socio_asides = SBA_set_asides[2:]
+    
     dollars_df = data_filter1.group_by(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE","FISCAL_YEAR"]).sum("DOLLARS_OBLIGATED")
     dollars_df2 = data_filter2.select(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE","DOLLARS_OBLIGATED","DATE_SIGNED"])
 
@@ -127,75 +147,80 @@ def show_FY_graph_table_set_asides (data_filter1, data_filter2):
     #Combine Fiscal Years
     dollars_FY["FISCAL_YEAR"] = dollars_FY["FISCAL_YEAR"].astype(int)
     dollars_ATOM["FISCAL_YEAR"] = [x.year if x.month<10 else x.year + 1 for x in dollars_ATOM["DATE_SIGNED"]]
+    
     dollars_ATOM_gp = dollars_ATOM.groupby(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE","FISCAL_YEAR"] ,as_index=False ,dropna=False
                                            ).sum()
 
-    dollars_FY = pd.concat([dollars_FY,dollars_ATOM_gp],ignore_index=True).sort_values(["FISCAL_YEAR"])
+    dollars_FY = pd.concat([dollars_FY,dollars_ATOM_gp],ignore_index=True)
 
     dollars_FY["set_aside"] = [x if x in SBA_socio_asides else y if y in SBA_set_asides else x 
                                for x,y in zip(dollars_FY["TYPE_OF_SET_ASIDE"],dollars_FY["IDV_TYPE_OF_SET_ASIDE"]) ]
 
-    dollars_FY.drop(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE"],axis=1, inplace=True)
+    dollars_FY = dollars_FY.drop(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE"],axis=1
+                                 ).fillna("NONE")
+    dollars_FY.loc[dollars_FY["set_aside"]=="N/A","set_aside"] = "NONE"
 
-    # set_aside_table=set_aside_table.with_columns(
-# 	[pl.when(pl.col('TYPE_OF_SET_ASIDE').is_in(SBA_socio_asides))
-#           .then(pl.col('TYPE_OF_SET_ASIDE'))
-#           .when(pl.col('IDV_TYPE_OF_SET_ASIDE').is_in(SBA_set_asides))
-#           .then(pl.col('IDV_TYPE_OF_SET_ASIDE'))
-#           .otherwise(pl.col('TYPE_OF_SET_ASIDE'))
-#           .alias("set_aside")
-#    dollars_FY=dollars_FY.rename(columns=doldict).set_index("FY").sort_index().round(0).apply(pd.to_numeric, downcast='integer',errors='ignore')
+    dollars_FY = dollars_FY.groupby(["FISCAL_YEAR","set_aside"],as_index=False).sum()
+    dollars_FY = dollars_FY.sort_values(["FISCAL_YEAR","set_aside"]).rename(
+        columns={"FISCAL_YEAR":"FY","DOLLARS_OBLIGATED":"Dollars Obligated","set_aside":"Set Aside"}
+        ).reset_index(drop=True)
+    dollars_FY["Set Aside"] = dollars_FY["Set Aside"].map(set_aside_dict).fillna("No set aside")
 
     pal = ["#002e6d", "#cc0000", "#969696", "#007dbc", "#197e4e", "#f1c400"]
+    fig = None
 
-    try:
-        fig=px.line(dollars_FY,x=dollars_FY.index,y=dollars_FY.columns
-                    ,color_discrete_sequence=pal
-                    ,labels={"value":"$","variable":"Type"})
+    if st.checkbox ("Collapse Set-Asides"):
+        dollars_FY = dollars_FY.groupby("FY",as_index=False).sum()
+        try:
+            fig=px.line(dollars_FY,x="FY",y="Dollars Obligated"
+                    ,color_discrete_sequence=pal)
+        except: pass
+    else:
+        try:
+            fig=px.line(dollars_FY,x="FY",y="Dollars Obligated",color="Set Aside"
+                    ,color_discrete_sequence=pal)
+        except: pass
+    if fig:    
         st.plotly_chart(fig)
-    except:
-        pass
-    st.table(dollars_FY)
-
-
-#%%
-def download_option (data_filter1, data_filter2):
-    vendorcols = ["VENDOR_DUNS_NUMBER","VENDOR_NAME","VENDOR_UEI","UEI_NAME"]
-    agencycols = ['FUNDING_DEPARTMENT_NAME','FUNDING_AGENCY_NAME',"FUNDING_OFFICE_NAME"]
-    contract_cols= ['PIID','IDV_PIID','MODIFICATION_NUMBER','FISCAL_YEAR','DATE_SIGNED','IDV_TYPE_OF_SET_ASIDE','TYPE_OF_SET_ASIDE','PRINCIPAL_NAICS_CODE',
-                   "PRINCIPAL_NAICS_DESCRIPTION","PRODUCT_OR_SERVICE_CODE",'PRODUCT_OR_SERVICE_DESCRIPTION',]
-    dolcols=["TOTAL_SB_ACT_ELIGIBLE_DOLLARS","SMALL_BUSINESS_DOLLARS","SDB_DOLLARS","WOSB_DOLLARS","CER_HUBZONE_SB_DOLLARS","SRDVOB_DOLLARS"]
-
-    allcols = vendorcols + agencycols + contract_cols + dolcols
-
-    if data_filter.count()>0:
-        data=data_filter.select(allcols)
-        data_df=data.to_pandas()
+    st.dataframe(dollars_FY.style.format({"Dollars Obligated": '${:,.0f}'}))
+    st.write("")
     
+#%%
+@st.cache_data
+def download_option (data_filter1, data_filter2):
+    vendorcols1 = ["VENDOR_DUNS_NUMBER","VENDOR_NAME","VENDOR_UEI","UEI_NAME"]
+    vendorcols2 = ["VENDOR_UEI_NUMBER","VENDOR_NAME"]
+    agencycols = ['FUNDING_DEPARTMENT_NAME','FUNDING_AGENCY_NAME',"FUNDING_OFFICE_NAME"]
+    contract_cols= ['PIID','IDV_PIID','MODIFICATION_NUMBER','DATE_SIGNED','IDV_TYPE_OF_SET_ASIDE','TYPE_OF_SET_ASIDE','PRINCIPAL_NAICS_CODE',
+                   "PRINCIPAL_NAICS_DESCRIPTION","PRODUCT_OR_SERVICE_CODE",'PRODUCT_OR_SERVICE_DESCRIPTION',]
+    dolcols=["DOLLARS_OBLIGATED"]
+
+    if data_filter1.count()>0:
+        data1=data_filter1.select(vendorcols1 + agencycols + contract_cols + dolcols)
+        data_df = data1.to_pandas()
+        data_df["VENDOR_NAME"] = data_df["VENDOR_NAME"].fillna(data_df["UEI_NAME"])
+
+    if data_filter2.count()>0:
+        data2 = data_filter2.select(vendorcols2 + agencycols + contract_cols + dolcols)
+        data_df2 = data2.to_pandas().rename(columns={"VENDOR_UEI_NUMBER":"VENDOR_UEI"})
+
+        if data_filter1.count()>0:
+            data_df = pd.concat([data_df, data_df2]).sort_values("DATE_SIGNED")
+        else:
+            data_df = data_df2.sort_values("DATE_SIGNED")
+
     st.download_button ("Download detailed data"
-           ,data_df.to_csv()
+           ,data_df.to_csv(index=False)
 	       ,file_name="Vendor_id_lookup.csv"
 	    )
 #%%
     
 if __name__ == '__main__':
-    page_title= "SBGR Vendor Lookup"
-    st.set_page_config(
-        page_title= page_title,
-        page_icon="https://www.sba.gov/brand/assets/sba/img/pages/logo/logo.svg",
-        layout="wide",
-        initial_sidebar_state="expanded")
     st.header(page_title)
 
     data1, data2 = connect_and_get_data()
-    #st.write([x for x in data.columns if "DOLLARS" in x])
 
     data1, data2 = vendor_id (data1, data2)
     if any([data1, data2]):
         show_FY_graph_table_set_asides (data1, data2)
-#        download_option (data1, data2)
-
-# enable USASpending API lookup?
-#%%
-#query the ATOM feed
-
+        download_option (data1, data2)
