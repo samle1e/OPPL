@@ -197,12 +197,13 @@ def show_FY_graph_table_set_asides (data_filter1, data_filter2):
             fig=px.line(dollars_FY,x="FY",y="Dollars Obligated",color="Set Aside"
                     ,color_discrete_sequence=px.colors.qualitative.Dark24, markers=True)
         except: pass
-    if fig: 
+    try: 
         fig.update_layout(xaxis={
             'range': [dollars_FY["FY"].min(), dollars_FY["FY"].max()], 
             'tickvals': [*range(int(dollars_FY["FY"].min()), int(dollars_FY["FY"].max())+2)]
             })
         st.plotly_chart(fig)
+    except: pass
 
     st.dataframe(dollars_FY.style.format({"FY":'{:.0f}',"Dollars Obligated": '${:,.0f}'}), use_container_width=True)
     st.write("")
