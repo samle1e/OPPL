@@ -108,7 +108,7 @@ def vendor_id (data1, data2):
                                 (data2["VENDOR_UEI_NUMBER"].isin(df_for_in)))
         except: 
             data1 = None
-            data2 = None
+            data2 = data2.filter((data2["VENDOR_UEI_NUMBER"].isin(df_for_in)))
     else:
         data1 = None
         data2 = None
