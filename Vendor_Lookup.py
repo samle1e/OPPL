@@ -19,6 +19,13 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded")
 
+hide_streamlit_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
 #%% connect to snowflake
 def connect_and_get_data ():
     connection_parameters = st.secrets.snowflake_credentials
@@ -33,17 +40,16 @@ def connect_and_get_data ():
 
     return data1, data2
 
-data1, data2 = connect_and_get_data ()
 #%% user input and filter
 def vendor_id (data1, data2):
     #user selection
     Id_select=st.sidebar.text_area("Enter UEIs or DUNS separated by commas")
     uploaded_file=st.sidebar.file_uploader("Upload a text file with UEIs or DUNS separated by commas")
-    st.sidebar.caption("Use UEIs for data for 2022 on. The search does not reliably match DUNS to UEIs.")
 
     try_UEI = st.sidebar.checkbox("Try to find UEIs for the DUNS you enter, to return data post-2021")
     try_DUNS = st.sidebar.checkbox("Try to find DUNS for the UEI you enter, to return data pre-2022")
-    
+    st.sidebar.caption("Recommend using UEIs to find data post-2021. The search does not reliably match DUNS to UEIs.")
+
     #prepare for filtering
     filter_list=[]
     if Id_select:
@@ -174,16 +180,21 @@ def show_FY_graph_table_set_asides (data_filter1, data_filter2):
         dollars_FY = dollars_FY.groupby("FY",as_index=False).sum()
         try:
             fig=px.line(dollars_FY,x="FY",y="Dollars Obligated"
-                    ,color_discrete_sequence=pal)
+                    ,color_discrete_sequence=px.colors.qualitative.Dark24, markers=True)
         except: pass
     else:
         try:
             fig=px.line(dollars_FY,x="FY",y="Dollars Obligated",color="Set Aside"
-                    ,color_discrete_sequence=pal)
+                    ,color_discrete_sequence=px.colors.qualitative.Dark24, markers=True)
         except: pass
-    if fig:    
+    if fig: 
+        fig.update_layout(xaxis={
+            'range': [dollars_FY["FY"].min(), dollars_FY["FY"].max()], 
+            'tickvals': [*range(int(dollars_FY["FY"].min()), int(dollars_FY["FY"].max())+2)]
+            })
         st.plotly_chart(fig)
-    st.dataframe(dollars_FY.style.format({"Dollars Obligated": '${:,.0f}'}))
+
+    st.dataframe(dollars_FY.style.format({"FY":'{:.0f}',"Dollars Obligated": '${:,.0f}'}), use_container_width=True)
     st.write("")
     
 #%%
@@ -211,7 +222,7 @@ def download_option (data_filter1, data_filter2):
             data_df = data_df2.sort_values("DATE_SIGNED")
 
     st.download_button ("Download detailed data"
-           ,data_df.to_csv(index=False)
+           ,data_df.round(2).to_csv(index=False)
 	       ,file_name="Vendor_id_lookup.csv"
 	    )
 #%%
