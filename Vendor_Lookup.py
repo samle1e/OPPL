@@ -147,40 +147,46 @@ def show_FY_graph_table_set_asides (data_filter1, data_filter2):
     SBA_set_asides = list(set_aside_dict.keys())[:12]
     SBA_socio_asides = SBA_set_asides[2:]
     
-    dollars_df = data_filter1.group_by(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE","FISCAL_YEAR"]).sum("DOLLARS_OBLIGATED")
+    if data_filter1:
+        dollars_df = data_filter1.group_by(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE","FISCAL_YEAR"]).sum("DOLLARS_OBLIGATED")
+        dollars_FY=dollars_df.to_pandas()
+        dollars_FY.rename(columns={"SUM(DOLLARS_OBLIGATED)":"DOLLARS_OBLIGATED"},inplace=True)
+
+        dollars_FY["FISCAL_YEAR"] = dollars_FY["FISCAL_YEAR"].astype(int)
+    else:
+        dollars_FY=None
+
     dollars_df2 = data_filter2.select(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE","DOLLARS_OBLIGATED","DATE_SIGNED"])
 
-    dollars_FY=dollars_df.to_pandas()
-    dollars_FY.rename(columns={"SUM(DOLLARS_OBLIGATED)":"DOLLARS_OBLIGATED"},inplace=True)
-
-    dollars_ATOM=dollars_df2.to_pandas()
-
-    #Combine Fiscal Years
-    dollars_FY["FISCAL_YEAR"] = dollars_FY["FISCAL_YEAR"].astype(int)
-    dollars_ATOM["FISCAL_YEAR"] = [x.year if x.month<10 else x.year + 1 for x in dollars_ATOM["DATE_SIGNED"]]
-    
-    dollars_ATOM_gp = dollars_ATOM.groupby(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE","FISCAL_YEAR"] ,as_index=False ,dropna=False
+    if dollars_df2:
+        dollars_ATOM=dollars_df2.to_pandas()
+        dollars_ATOM["FISCAL_YEAR"] = [x.year if x.month<10 else x.year + 1 for x in dollars_ATOM["DATE_SIGNED"]]
+        dollars_ATOM_gp = dollars_ATOM.groupby(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE","FISCAL_YEAR"] ,as_index=False ,dropna=False
                                            ).sum()
+    else:
+        dollars_ATOM_gp = None
 
-    dollars_FY = pd.concat([dollars_FY,dollars_ATOM_gp],ignore_index=True)
+    try:
+        dollars_FY = pd.concat([dollars_FY,dollars_ATOM_gp],ignore_index=True)
 
-    dollars_FY["set_aside"] = [x if x in SBA_socio_asides else y if y in SBA_set_asides else x 
+        dollars_FY["set_aside"] = [x if x in SBA_socio_asides else y if y in SBA_set_asides else x 
                                for x,y in zip(dollars_FY["TYPE_OF_SET_ASIDE"],dollars_FY["IDV_TYPE_OF_SET_ASIDE"]) ]
 
-    dollars_FY = dollars_FY.drop(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE"],axis=1
-                                 ).fillna("NONE")
-    dollars_FY.loc[dollars_FY["set_aside"]=="N/A","set_aside"] = "NONE"
+        dollars_FY = dollars_FY.drop(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE"],axis=1
+                                    ).fillna("NONE")
+        dollars_FY.loc[dollars_FY["set_aside"]=="N/A","set_aside"] = "NONE"
 
-    dollars_FY = dollars_FY.groupby(["FISCAL_YEAR","set_aside"],as_index=False).sum()
-    dollars_FY = dollars_FY.sort_values(["FISCAL_YEAR","set_aside"]).rename(
-        columns={"FISCAL_YEAR":"FY","DOLLARS_OBLIGATED":"Dollars Obligated","set_aside":"Set Aside"}
-        ).reset_index(drop=True)
-    dollars_FY["Set Aside"] = dollars_FY["Set Aside"].map(set_aside_dict).fillna("No set aside")
+        dollars_FY = dollars_FY.groupby(["FISCAL_YEAR","set_aside"],as_index=False).sum()
+        dollars_FY = dollars_FY.sort_values(["FISCAL_YEAR","set_aside"]).rename(
+            columns={"FISCAL_YEAR":"FY","DOLLARS_OBLIGATED":"Dollars Obligated","set_aside":"Set Aside"}
+            ).reset_index(drop=True)
+        dollars_FY["Set Aside"] = dollars_FY["Set Aside"].map(set_aside_dict).fillna("No set aside")
+    except:
+        dollars_FY=None
 
-    pal = ["#002e6d", "#cc0000", "#969696", "#007dbc", "#197e4e", "#f1c400"]
     fig = None
 
-    if st.checkbox ("Collapse Set-Asides"):
+    if st.checkbox ("Collapse Set-Asides") and dollars_FY:
         dollars_FY = dollars_FY.groupby("FY",as_index=False).sum()
         try:
             fig=px.line(dollars_FY,x="FY",y="Dollars Obligated"
@@ -210,12 +216,12 @@ def download_option (data_filter1, data_filter2):
                    "PRINCIPAL_NAICS_DESCRIPTION","PRODUCT_OR_SERVICE_CODE",'PRODUCT_OR_SERVICE_DESCRIPTION',]
     dolcols=["DOLLARS_OBLIGATED"]
 
-    if data_filter1.count()>0:
+    try:
         data1=data_filter1.select(vendorcols1 + agencycols + contract_cols + dolcols)
         data_df = data1.to_pandas()
         data_df["VENDOR_NAME"] = data_df["VENDOR_NAME"].fillna(data_df["UEI_NAME"])
         data_df.drop(["UEI_NAME"],axis=1,inplace=True)
-
+    except: pass
     if data_filter2.count()>0:
         data2 = data_filter2.select(vendorcols2 + agencycols + contract_cols + dolcols)
         data_df2 = data2.to_pandas().rename(columns={"VENDOR_UEI_NUMBER":"VENDOR_UEI"})
@@ -224,11 +230,13 @@ def download_option (data_filter1, data_filter2):
             data_df = pd.concat([data_df, data_df2]).sort_values("DATE_SIGNED")
         else:
             data_df = data_df2.sort_values("DATE_SIGNED")
-
-    st.download_button ("Download detailed data"
-           ,data_df.round(2).to_csv(index=False)
-	       ,file_name="Vendor_id_lookup.csv"
-	    )
+    try:
+        st.download_button ("Download detailed data"
+            ,data_df.round(2).to_csv(index=False)
+            ,file_name="Vendor_id_lookup.csv"
+            )
+    except:
+        st.write("No contracts found")
 #%%
     
 if __name__ == '__main__':
