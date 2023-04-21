@@ -6,3 +6,4 @@ snowflake
 snowflake-snowpark-python
 snowflake-connector-python
 pyarrow<10.1.0,>=10.0.1
+xlrd >= 1.0.0
