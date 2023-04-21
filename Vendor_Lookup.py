@@ -137,7 +137,6 @@ def show_FY_graph_table_set_asides (data_filter1, data_filter2):
                     'ESB':'Emerging Small Business Set-Aside',
                     'HMP':'HBCU or MI Set-Aside -- Partial',
                     'HMT':'HBCU or MI Set-Aside -- Total',
-                    'HMT':'HBCU or MI Set-Aside -- Total',
                     'NONE':'No set aside',
                     'VSB':'Very Small Business Set Aside',
                     'VSA':'Veteran Set Aside',
