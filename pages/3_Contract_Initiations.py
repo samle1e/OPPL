@@ -319,29 +319,42 @@ def graph_and_display_summary_stats (summary_stats):
         )
     
 #%%
-def download_option (data):
+def histogram_and_download_option (data, summary_stats):
+    min_value = summary_stats["FY"].min()
+    max_value = summary_stats["FY"].max()
+    year = st.slider("Select year for histograph", min_value = min_value, max_value = max_value
+        , value = max_value - 1)
+
     modzero = [x.filter(x["MODIFICATION_NUMBER"]=="0") for x in data]
 
     vendorcols1 = ["VENDOR_DUNS_NUMBER","VENDOR_NAME","VENDOR_UEI","UEI_NAME"]
     vendorcols2 = ["VENDOR_UEI_NUMBER","VENDOR_NAME"]
     agencycols = ['FUNDING_DEPARTMENT_NAME','FUNDING_AGENCY_NAME',"FUNDING_OFFICE_NAME"]
     contract_cols= ['PIID','IDV_PIID','MODIFICATION_NUMBER','DATE_SIGNED','IDV_TYPE_OF_SET_ASIDE','TYPE_OF_SET_ASIDE','PRINCIPAL_NAICS_CODE',
-                   "PRINCIPAL_NAICS_DESCRIPTION","PRODUCT_OR_SERVICE_CODE",'PRODUCT_OR_SERVICE_DESCRIPTION',]
-    dolcols=["DOLLARS_OBLIGATED"]
+                   "PRINCIPAL_NAICS_DESCRIPTION","PRODUCT_OR_SERVICE_CODE",'PRODUCT_OR_SERVICE_DESCRIPTION']
+    dolcols=["ULTIMATE_CONTRACT_VALUE", "DOLLARS_OBLIGATED"]
 
-    data1=modzero[0].select(vendorcols1 + agencycols + contract_cols + dolcols)
-    data_df = data1.to_pandas()
-    data_df["VENDOR_NAME"] = data_df["VENDOR_NAME"].fillna(data_df["UEI_NAME"])
-    data_df.drop(["UEI_NAME"],axis=1,inplace=True)
+    data_filt = modzero[0].filter(modzero[0]["FY"]==str(year))
 
-    if modzero[1].count()>0:
-        data2 = modzero[1].select(vendorcols2 + agencycols + contract_cols + dolcols)
-        data_df2 = data2.to_pandas().rename(columns={"VENDOR_UEI_NUMBER":"VENDOR_UEI"})
-    else: data_df2=pd.DataFrame(None)
+    data_df = None
+    if data_filt.count() > 0
+        with st.spinner (f"Processing {data_filt.count()} transactions"):
+            data_df = data_filt.select(
+                vendorcols1 + agencycols + contract_cols + dolcols).to_pandas()
+        data_df["VENDOR_NAME"] = data_df["VENDOR_NAME"].fillna(data_df["UEI_NAME"])
+        data_df.drop(["UEI_NAME"],axis=1,inplace=True)
+    else:
+        data_filt2 = modzero[1].filter((col("DATE_SIGNED") > datetime (year-1, 9, 30, 0, 0)) & (
+            (col("DATE_SIGNED") < datetime (year, 10, 1, 0, 0))
+            ))
+        if data_filt2.count > 0:
+            with st.spinner (f"Processing {data_filt2.count} transactions"):
+                data_df = modzero[1].select(vendorcols2 + agencycols + contract_cols + dolcols
+                    ).to_pandas().rename(columns={"VENDOR_UEI_NUMBER":"VENDOR_UEI"})
 
-    data_df = pd.concat([data_df, data_df2]).sort_values("DATE_SIGNED")
-        
-    try:
+    if data_df:
+        histogram = px.histogram(data_df, x="ULTIMATE_CONTRACT_VALUE", 
+            nbins=40, labels = {"ULTIMATE_CONTRACT_VALUE": "Total Contract Value", log_x = True})
         st.download_button ("Download detailed data"
             ,data_df.round(2).to_csv(index=False)
             ,file_name="Contract_Initiations.csv"
@@ -368,8 +381,7 @@ if __name__ == '__main__':
 
     graph_and_display_summary_stats (summary_stats)
 
-    #download_option (data)
-
+    download_option (data, summary_stats)
 
     st.caption("Contract Value includes Base value plus Options")
     st.caption("Source: SBA Small Business Goaling Report for FY09-FY22; ATOM Feed for later data")
