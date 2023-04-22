@@ -337,7 +337,7 @@ def histogram_and_download_option (data, summary_stats):
     data_filt = modzero[0].filter(modzero[0]["FY"]==str(year))
 
     data_df = None
-    if data_filt.count() > 0
+    if data_filt.count() > 0:
         with st.spinner (f"Processing {data_filt.count()} transactions"):
             data_df = data_filt.select(
                 vendorcols1 + agencycols + contract_cols + dolcols).to_pandas()
