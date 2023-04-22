@@ -354,7 +354,7 @@ def histogram_and_download_option (data, summary_stats):
 
     if data_df:
         histogram = px.histogram(data_df, x="ULTIMATE_CONTRACT_VALUE", 
-            nbins=40, labels = {"ULTIMATE_CONTRACT_VALUE": "Total Contract Value", log_x = True})
+            nbins=40, labels = {"ULTIMATE_CONTRACT_VALUE": "Total Contract Value"}, log_x = True)
         st.download_button ("Download detailed data"
             ,data_df.round(2).to_csv(index=False)
             ,file_name="Contract_Initiations.csv"
