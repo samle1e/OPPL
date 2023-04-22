@@ -198,8 +198,7 @@ def filter_award_type (data):
     st.sidebar.write("<b>Common adjustments</b>",unsafe_allow_html = True)
     choices = ["Exclude all orders and BPA calls",
                "Exclude initial load of multiple-award contracts",
-               "Exclude initial load of all indefinite-delivery contracts",
-               "Exclude all negative-dollar and zero-dollar initiations"]
+               "Exclude initial load of all indefinite-delivery contracts"]
     
     award_type = [True] * 4
     for i, x in enumerate(choices):
@@ -215,8 +214,6 @@ def filter_award_type (data):
         except:
             data = filter_data (data, {"AWARD_IDV_TYPE_DESCRIPTION":
                                        ["DEFINITIVE CONTRACT","DELIVERY ORDER","PURCHASE ORDER","BPA CALL"]})
-    elif award_type[3]:
-            data = [x.filter(x["ULTIMATE_CONTRACT_VALUE"] > 0) for x in data]
     return data    
 #%%
 def get_summary_stats (data, disable_size = False, range = 0):
