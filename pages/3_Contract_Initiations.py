@@ -125,7 +125,7 @@ def filter_NAICS (data):
     NAICS_names = get_NAICS_choices()
     choices = [f"{k}: {v}" for k,v in NAICS_names.items()]
 
-    NAICS_select = st.sidebar.multiselect(label="NAICS (pick multi)"
+    NAICS_select = st.sidebar.multiselect(label="NAICS (can combine)"
                                 ,options=choices)
     
     NAICS_select_short=[x.split(": ")[0] for x in NAICS_select]
@@ -304,8 +304,11 @@ def graph_and_display_summary_stats (summary_stats):
     options = summary_stats.columns.to_list()[-5:]
 
     graph = st.selectbox("Metric to graph", options= options)
-    fig = px.bar(summary_stats, x="FY", y=graph, color="Size", title=graph ,color_discrete_sequence=pal)
-
+    if summary_stats.columns[1] == "Size":
+        fig = px.bar(summary_stats, x="FY", y=graph, color="Size", title=graph ,color_discrete_sequence=pal)
+    else:
+        fig = px.bar(summary_stats, x="FY", y=graph, title=graph ,color_discrete_sequence=pal)
+    
     st.plotly_chart(fig)
 
     st.dataframe(summary_stats.round(2).reset_index(drop=True).style.format(
