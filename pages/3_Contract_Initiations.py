@@ -302,9 +302,9 @@ def graph_and_display_summary_stats (summary_stats):
 
     graph = st.selectbox("Metric to graph", options= options)
     if summary_stats.columns[1] == "Size":
-        fig = px.bar(summary_stats, x="FY", y=graph, color="Size", title=graph ,color_discrete_sequence=pal)
+        fig = px.bar(summary_stats, x="FY", y=graph, color="Size", color_discrete_sequence=pal)
     else:
-        fig = px.bar(summary_stats, x="FY", y=graph, title=graph ,color_discrete_sequence=pal)
+        fig = px.bar(summary_stats, x="FY", y=graph, color_discrete_sequence=pal)
     
     st.plotly_chart(fig)
 
