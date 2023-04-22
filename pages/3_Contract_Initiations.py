@@ -359,7 +359,7 @@ def histogram_and_download_option (data, summary_stats):
             ,data_df.round(2).to_csv(index=False)
             ,file_name="Contract_Initiations.csv"
             )
-    except:
+    else:
         st.write("No contracts found")
 #%%
 if __name__ == '__main__':
