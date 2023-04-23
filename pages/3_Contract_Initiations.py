@@ -274,18 +274,20 @@ def get_summary_stats (data, disable_size = False, range = 0):
     stats_pd = pd.concat([FPDS_stats, atom_stats])
 
     if disable_size:
-        stats_pd = stats_pd.sort_values("FY")
+        stats_pd = stats_pd.sort_values("FY").reset_index(drop=True)
     else:
         from pandas.api.types import CategoricalDtype
         cattype = CategoricalDtype(categories=["SMALL BUSINESS","OTHER THAN SMALL BUSINESS"], ordered=True)
         stats_pd['Size'] = stats_pd['Size'].astype(cattype)
-        stats_pd = stats_pd.loc[stats_pd["Size"].notnull()].sort_values(["FY", "Size"])
+        stats_pd = stats_pd.loc[stats_pd["Size"].notnull()].sort_values(["FY", "Size"]).reset_index(drop=True)
 
 
     if range:
         stats_pd["Range"] = stats_pd["Range"].map({True: "Above", False:"Below or Equal to"}, na_action='ignore')
         stats_pd = stats_pd.sort_values(["FY","Range", "Size"])
         stats_pd = stats_pd.rename(columns = {"Range": f"Above/Below ${range:,}"})
+        
+    stats_pd.index += 1
 
     return stats_pd
 #%%
@@ -315,7 +317,7 @@ def graph_and_display_summary_stats (summary_stats):
     st.caption("Contract Value includes Base value plus Options")
     st.caption("Source: SBA Small Business Goaling Report for FY09-FY22; ATOM Feed for later data")
 
-    st.dataframe(summary_stats.round(2).reset_index(drop=True).style.format(
+    st.dataframe(summary_stats.round(2).style.format(
             {"FY":'{:.0f}',
             "No. of Contracts Initiated": '{:,.0f}',
             "Aggregate Contract Value": '${:,.0f}',   
@@ -323,7 +325,7 @@ def graph_and_display_summary_stats (summary_stats):
             "Average Contract Value" : '${:,.0f}',   
             "Median Contract Value" : '${:,.0f}',  
             "Average No. Offers" : '{:.1f}'
-            })
+            }).hide()
         )
     st.download_button ("Download this table"
         ,summary_stats.round(2).to_csv(index=False)
@@ -377,9 +379,11 @@ def histogram_and_download_option (data, summary_stats):
         histogram = px.histogram(data_df, title = "Distribution of Total Contract Value",
             x="ULTIMATE_CONTRACT_VALUE", labels = {"ULTIMATE_CONTRACT_VALUE": "Total Contract Value"},
             color_discrete_sequence=pal,
-            log_y= True, nbins = 50, range_x=[0,data_df["ULTIMATE_CONTRACT_VALUE"].max()])
+            log_y= True, nbins = 50)
+        histogram.update_traces (xbins = dict(start = 0))
+
         st.plotly_chart (histogram)
-        st.caption ("Y-axis is logrithmic. Expand graph to see counts.")
+        st.caption ("Y-axis is logarithmic. Expand graph to see counts.")
         if len(data_df) < 1000000:
             st.download_button ("Download detailed data"
                 ,data_df.round(2).to_csv(index=False)
