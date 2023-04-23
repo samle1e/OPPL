@@ -234,17 +234,19 @@ def get_summary_stats (data, disable_size = False, range = 0):
                             spf.max("ULTIMATE_CONTRACT_VALUE"),
                             spf.avg("ULTIMATE_CONTRACT_VALUE"),
                             spf.median("ULTIMATE_CONTRACT_VALUE"),
+                            spf.avg("NUMBER_OF_OFFERS_RECEIVED")
                             ).to_pandas()
     FPDS_stats = FPDS_stats.rename(columns = {"FISCAL_YEAR":"FY", "CO_BUS_SIZE_DETERMINATION": "Size", "RANGE":"Range",
              'COUNT(ULTIMATE_CONTRACT_VALUE)': "No. of Contracts Initiated",'SUM(ULTIMATE_CONTRACT_VALUE)': "Aggregate Contract Value"
              , 'MAX(ULTIMATE_CONTRACT_VALUE)':"Max Contract Value",
-       'AVG(ULTIMATE_CONTRACT_VALUE)':"Average Contract Value", 'MEDIAN(ULTIMATE_CONTRACT_VALUE)': "Median Contract Value"})
+       'AVG(ULTIMATE_CONTRACT_VALUE)':"Average Contract Value", 'MEDIAN(ULTIMATE_CONTRACT_VALUE)': "Median Contract Value",
+       'AVG(NUMBER_OF_OFFERS_RECEIVED)':"Average No. Offers"})
     FPDS_stats["FY"] = pd.to_numeric(FPDS_stats["FY"])
     FPDS_stats = FPDS_stats.loc[(FPDS_stats["FY"] > 2010)].sort_values(["FY"])
 
     last_FY = int(FPDS_stats["FY"].max())
     atom_pd = modzero[1].filter((col("DATE_SIGNED") > datetime (last_FY, 9, 30, 0, 0))).select(
-        ["DATE_SIGNED","CO_BUS_SIZE_DETERMINATION","ULTIMATE_CONTRACT_VALUE"]).to_pandas()
+        ["DATE_SIGNED","CO_BUS_SIZE_DETERMINATION","ULTIMATE_CONTRACT_VALUE", "NUMBER_OF_OFFERS_RECEIVED"]).to_pandas()
     atom_pd["FISCAL_YEAR"] = [x.year if x.month<10 else x.year + 1 for x in atom_pd["DATE_SIGNED"]]
 
     if (range > 0):
@@ -264,7 +266,8 @@ def get_summary_stats (data, disable_size = False, range = 0):
         "Aggregate Contract Value": pd.NamedAgg('ULTIMATE_CONTRACT_VALUE', 'sum'),   
         "Max Contract Value" : pd.NamedAgg('ULTIMATE_CONTRACT_VALUE', 'max'),
         "Average Contract Value" : pd.NamedAgg('ULTIMATE_CONTRACT_VALUE', 'mean'),
-        "Median Contract Value" : pd.NamedAgg('ULTIMATE_CONTRACT_VALUE', 'median')
+        "Median Contract Value" : pd.NamedAgg('ULTIMATE_CONTRACT_VALUE', 'median'),
+        "Average No. Offers" : pd.NamedAgg('NUMBER_OF_OFFERS_RECEIVED', 'mean'),
         })
     atom_stats = atom_stats.rename(columns = {"FISCAL_YEAR":"FY", "CO_BUS_SIZE_DETERMINATION": "Size"})
 
@@ -274,8 +277,7 @@ def get_summary_stats (data, disable_size = False, range = 0):
         stats_pd = stats_pd.sort_values("FY")
     else:
         from pandas.api.types import CategoricalDtype
-        stats_pd.loc[stats_pd['Size']=="OTHER THAN SMALL BUSINESS", 'Size'] = 'OTHER THAN SMALL'
-        cattype = CategoricalDtype(categories=["SMALL BUSINESS","OTHER THAN SMALL"], ordered=True)
+        cattype = CategoricalDtype(categories=["SMALL BUSINESS","OTHER THAN SMALL BUSINESS"], ordered=True)
         stats_pd['Size'] = stats_pd['Size'].astype(cattype)
         stats_pd = stats_pd.loc[stats_pd["Size"].notnull()].sort_values(["FY", "Size"])
 
@@ -298,15 +300,20 @@ def allow_more_filtering (stats):
 #%%
 def graph_and_display_summary_stats (summary_stats):
     pal = ["#002e6d", "#cc0000", "#969696", "#007dbc", "#197e4e", "#f1c400"]
-    options = summary_stats.columns.to_list()[-5:]
+    options = summary_stats.columns.to_list()[-6:]
 
     graph = st.selectbox("Metric to graph", options= options)
-    if summary_stats.columns[1] == "Size":
-        fig = px.bar(summary_stats, x="FY", y=graph, color="Size", color_discrete_sequence=pal)
-    else:
-        fig = px.bar(summary_stats, x="FY", y=graph, color_discrete_sequence=pal)
     
+    if summary_stats.columns[1] == "Size":
+        fig = px.bar(summary_stats, x="FY", y=graph, color="Size", orientation = 'v', barmode='group', color_discrete_sequence=pal)
+    else:
+        fig = px.bar(summary_stats, x="FY", y=graph, orientation = 'v', color_discrete_sequence=pal)
+    fig.update_xaxes(type='category')
+
     st.plotly_chart(fig)
+    
+    st.caption("Contract Value includes Base value plus Options")
+    st.caption("Source: SBA Small Business Goaling Report for FY09-FY22; ATOM Feed for later data")
 
     st.dataframe(summary_stats.round(2).reset_index(drop=True).style.format(
             {"FY":'{:.0f}',
@@ -314,15 +321,23 @@ def graph_and_display_summary_stats (summary_stats):
             "Aggregate Contract Value": '${:,.0f}',   
             "Max Contract Value" : '${:,.0f}',   
             "Average Contract Value" : '${:,.0f}',   
-            "Median Contract Value" : '${:,.0f}',   
+            "Median Contract Value" : '${:,.0f}',  
+            "Average No. Offers" : '{:.1f}'
             })
         )
+    st.download_button ("Download this table"
+        ,summary_stats.round(2).to_csv(index=False)
+        ,file_name="Contract_Initiations_summary.csv"
+        )
+    
     
 #%%
-def histogram_and_download_option (data, summary_stats):
-    min_value = summary_stats.at[0,"FY"]
-    max_value = summary_stats.at[-1,"FY"]
-    year = st.slider("Select year for histograph", min_value = min_value, max_value = max_value
+def histogram_and_download_option (data, summary_stats): 
+    min_value = summary_stats["FY"].min()
+
+    max_value = summary_stats["FY"].max()    
+    
+    year = st.slider("Select year for histogram and download", min_value = min_value, max_value = max_value
         , value = max_value - 1)
 
     modzero = [x.filter(x["MODIFICATION_NUMBER"]=="0") for x in data]
@@ -332,35 +347,44 @@ def histogram_and_download_option (data, summary_stats):
     agencycols = ['FUNDING_DEPARTMENT_NAME','FUNDING_AGENCY_NAME',"FUNDING_OFFICE_NAME"]
     contract_cols= ['PIID','IDV_PIID','MODIFICATION_NUMBER','DATE_SIGNED','IDV_TYPE_OF_SET_ASIDE','TYPE_OF_SET_ASIDE','PRINCIPAL_NAICS_CODE',
                    "PRINCIPAL_NAICS_DESCRIPTION","PRODUCT_OR_SERVICE_CODE",'PRODUCT_OR_SERVICE_DESCRIPTION']
-    dolcols=["ULTIMATE_CONTRACT_VALUE", "DOLLARS_OBLIGATED"]
+    dolcols=['NUMBER_OF_OFFERS_RECEIVED',"ULTIMATE_CONTRACT_VALUE", "DOLLARS_OBLIGATED"]
 
-    data_filt = modzero[0].filter(modzero[0]["FY"]==str(year))
+    data_filt = modzero[0].filter(modzero[0]["FISCAL_YEAR"]==str(year))
+    data_filt2 = modzero[1].filter((col("DATE_SIGNED") > datetime (year-1, 9, 30, 0, 0)) & (
+            (col("DATE_SIGNED") < datetime (year, 10, 1, 0, 0)) ))
 
-    data_df = None
-    if data_filt.count() > 0:
+    data_df = pd.DataFrame(None)
+
+    if (data_filt.count() > 1000000) | (data_filt2.count() > 1000000):
+        count = data_filt.count() + data_filt2.count() 
+        st.write(f"Found {count:,} transactions. Filter to 1 million or less for histogram and download option")
+    elif (data_filt.count() > 0):
         with st.spinner (f"Processing {data_filt.count()} transactions"):
             data_df = data_filt.select(
                 vendorcols1 + agencycols + contract_cols + dolcols).to_pandas()
         data_df["VENDOR_NAME"] = data_df["VENDOR_NAME"].fillna(data_df["UEI_NAME"])
         data_df.drop(["UEI_NAME"],axis=1,inplace=True)
-    else:
-        data_filt2 = modzero[1].filter((col("DATE_SIGNED") > datetime (year-1, 9, 30, 0, 0)) & (
-            (col("DATE_SIGNED") < datetime (year, 10, 1, 0, 0))
-            ))
-        if data_filt2.count > 0:
-            with st.spinner (f"Processing {data_filt2.count} transactions"):
+    elif (data_filt2.count() > 0):
+        if (data_filt.count() <= 1000000):
+            with st.spinner (f"Processing {data_filt2.count()} transactions"):
                 data_df = modzero[1].select(vendorcols2 + agencycols + contract_cols + dolcols
                     ).to_pandas().rename(columns={"VENDOR_UEI_NUMBER":"VENDOR_UEI"})
-
-    if data_df:
-        histogram = px.histogram(data_df, x="ULTIMATE_CONTRACT_VALUE", 
-            nbins=40, labels = {"ULTIMATE_CONTRACT_VALUE": "Total Contract Value"}, log_x = True)
-        st.download_button ("Download detailed data"
-            ,data_df.round(2).to_csv(index=False)
-            ,file_name="Contract_Initiations.csv"
-            )
     else:
         st.write("No contracts found")
+
+    if len(data_df)>0:
+        pal = ["#002e6d", "#cc0000", "#969696", "#007dbc", "#197e4e", "#f1c400"]
+        histogram = px.histogram(data_df, title = "Distribution of Total Contract Value",
+            x="ULTIMATE_CONTRACT_VALUE", labels = {"ULTIMATE_CONTRACT_VALUE": "Total Contract Value"},
+            color_discrete_sequence=pal,
+            log_y= True, nbins = 50, range_x=[0,data_df["ULTIMATE_CONTRACT_VALUE"].max()])
+        st.plotly_chart (histogram)
+        st.caption ("Y-axis is logrithmic. Expand graph to see counts.")
+        if len(data_df) < 1000000:
+            st.download_button ("Download detailed data"
+                ,data_df.round(2).to_csv(index=False)
+                ,file_name="Contract_Initiations_detailed.csv"
+                )
 #%%
 if __name__ == '__main__':
     st.header(page_title)
@@ -381,8 +405,6 @@ if __name__ == '__main__':
 
     graph_and_display_summary_stats (summary_stats)
 
-#    histogram_and_download_option (data, summary_stats)
+    histogram_and_download_option (data, summary_stats)
 
-    st.caption("Contract Value includes Base value plus Options")
-    st.caption("Source: SBA Small Business Goaling Report for FY09-FY22; ATOM Feed for later data")
 # %%
