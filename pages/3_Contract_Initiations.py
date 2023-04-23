@@ -381,7 +381,7 @@ if __name__ == '__main__':
 
     graph_and_display_summary_stats (summary_stats)
 
-    histogram_and_download_option (data, summary_stats)
+#    histogram_and_download_option (data, summary_stats)
 
     st.caption("Contract Value includes Base value plus Options")
     st.caption("Source: SBA Small Business Goaling Report for FY09-FY22; ATOM Feed for later data")
