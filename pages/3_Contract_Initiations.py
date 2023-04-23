@@ -333,9 +333,9 @@ def graph_and_display_summary_stats (summary_stats):
     
 #%%
 def histogram_and_download_option (data, summary_stats): 
-    min_value = summary_stats["FY"].min()
+    min_value = int(summary_stats["FY"].min())
 
-    max_value = summary_stats["FY"].max()    
+    max_value = int(summary_stats["FY"].max())    
     
     year = st.slider("Select year for histogram and download", min_value = min_value, max_value = max_value
         , value = max_value - 1)
@@ -357,7 +357,7 @@ def histogram_and_download_option (data, summary_stats):
 
     if (data_filt.count() > 1000000) | (data_filt2.count() > 1000000):
         count = data_filt.count() + data_filt2.count() 
-        st.write(f"Found {count:,} transactions. Filter to 1 million or less for histogram and download option")
+        st.write(f"Found {count:,} transactions. Filter to 1 million or less to reveal histogram and show download option.")
     elif (data_filt.count() > 0):
         with st.spinner (f"Processing {data_filt.count()} transactions"):
             data_df = data_filt.select(
