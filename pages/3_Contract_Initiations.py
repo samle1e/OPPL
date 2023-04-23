@@ -320,8 +320,8 @@ def graph_and_display_summary_stats (summary_stats):
     
 #%%
 def histogram_and_download_option (data, summary_stats):
-    min_value = summary_stats["FY"].min()
-    max_value = summary_stats["FY"].max()
+    min_value = summary_stats.at[0,"FY"]
+    max_value = summary_stats.at[-1,"FY"]
     year = st.slider("Select year for histograph", min_value = min_value, max_value = max_value
         , value = max_value - 1)
 
