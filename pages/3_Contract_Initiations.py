@@ -352,15 +352,15 @@ def histogram_and_download_option (data, summary_stats):
                 data_df = modzero[1].select(vendorcols2 + agencycols + contract_cols + dolcols
                     ).to_pandas().rename(columns={"VENDOR_UEI_NUMBER":"VENDOR_UEI"})
 
-    # if data_df:
-    #     histogram = px.histogram(data_df, x="ULTIMATE_CONTRACT_VALUE", 
-    #         nbins=40, labels = {"ULTIMATE_CONTRACT_VALUE": "Total Contract Value"}, log_x = True)
-    #     st.download_button ("Download detailed data"
-    #         ,data_df.round(2).to_csv(index=False)
-    #         ,file_name="Contract_Initiations.csv"
-    #         )
-    # else:
-    #     st.write("No contracts found")
+    if data_df:
+        histogram = px.histogram(data_df, x="ULTIMATE_CONTRACT_VALUE", 
+            nbins=40, labels = {"ULTIMATE_CONTRACT_VALUE": "Total Contract Value"}, log_x = True)
+        st.download_button ("Download detailed data"
+            ,data_df.round(2).to_csv(index=False)
+            ,file_name="Contract_Initiations.csv"
+            )
+    else:
+        st.write("No contracts found")
 #%%
 if __name__ == '__main__':
     st.header(page_title)
@@ -381,7 +381,7 @@ if __name__ == '__main__':
 
     graph_and_display_summary_stats (summary_stats)
 
-    download_option (data, summary_stats)
+    histogram_and_download_option (data, summary_stats)
 
     st.caption("Contract Value includes Base value plus Options")
     st.caption("Source: SBA Small Business Goaling Report for FY09-FY22; ATOM Feed for later data")
