@@ -317,7 +317,7 @@ def graph_and_display_summary_stats (summary_stats):
     st.caption("Contract Value includes Base value plus Options")
     st.caption("Source: SBA Small Business Goaling Report for FY09-FY22; ATOM Feed for later data")
 
-    st.dataframe(summary_stats.round(2).style.format(
+    st.dataframe(summary_stats.style.format(
             {"FY":'{:.0f}',
             "No. of Contracts Initiated": '{:,.0f}',
             "Aggregate Contract Value": '${:,.0f}',   
@@ -325,7 +325,7 @@ def graph_and_display_summary_stats (summary_stats):
             "Average Contract Value" : '${:,.0f}',   
             "Median Contract Value" : '${:,.0f}',  
             "Average No. Offers" : '{:.1f}'
-            }).hide()
+            }, na_rep = "NA")
         )
     st.download_button ("Download this table"
         ,summary_stats.round(2).to_csv(index=False)
