@@ -91,9 +91,9 @@ def vendor_id (data1, data2):
             return lst
 
         if try_UEI:
-            UEI_list=match_id("DUNS",DUNS_list)       
+            UEI_list.append(match_id("DUNS",DUNS_list))       
         if try_DUNS:
-            DUNS_list=match_id("UEI",UEI_list)
+            DUNS_list.append(match_id("UEI",UEI_list))
 
     #filter the datasets
     if (len(UEI_list)>0) | (len(DUNS_list)>0):
