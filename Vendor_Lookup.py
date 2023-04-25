@@ -84,8 +84,10 @@ def vendor_id (data1, data2):
             if match_df.shape[0]>0:
                 st.success(f"These {id_type} were successfully matched:")
                 st.table(match_df)
-
-                lst.extend(match_df[id_type])
+                if id_type == "DUNS":
+                    lst.extend(match_df["UEI"])
+                else:
+                    lst.extend(match_df["DUNS"])
             else:
                 st.warning(f"No {id_type} were matched.")
             return lst
