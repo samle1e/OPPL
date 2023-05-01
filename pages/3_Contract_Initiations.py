@@ -154,7 +154,7 @@ def filter_PSC (data):
         return PSC_names
     
     PSC_select = get_PSC_choices()
-    options = [f"{k}: {v}" for k, v in PSC_select.iteritems()]
+    options = [f"{k}: {v}" for k, v in PSC_select.items()]
 
     PSC_pick=st.sidebar.multiselect(label="Product Service Codes (can combine)"
                             ,options = options)
