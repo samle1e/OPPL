@@ -1,11 +1,11 @@
 # %%
-#import polars as pl
+import polars as pl
 import pandas as pd
 import streamlit as st
-#import pyarrow.parquet as pq
-#import pyarrow.compute as pc
-#import os
-#os.chdir("C:/Users/SQLe/U.S. Small Business Administration/Office of Policy Planning and Liaison (OPPL) - Data Lake/")
+import pyarrow.parquet as pq
+import pyarrow.compute as pc
+import os
+import numpy as np
 
 
 # %%
@@ -18,44 +18,95 @@ st.set_page_config(
 
 # %% 
 @st.cache_data
-def get_data(year_to_run):
-#year_to_run="2022"
-    # PY_pos=pq.ParquetDataset("./SBGR_parquet/SBGR_FY"+str(int(year_to_run)-1),
-    #                 filters=[('TOTAL_SB_ACT_ELIGIBLE_DOLLARS','>',0)])
-    # CY_pos=pq.ParquetDataset("./Double_Credit/FY_22.parquet"
-    #                 ,filters=[('TOTAL_SB_ACT_ELIGIBLE_DOLLARS','>',0)])
-    # CY_neg=pq.ParquetDataset("./Double_Credit/FY_22.parquet"
-    #                 ,filters=[('TOTAL_SB_ACT_ELIGIBLE_DOLLARS','<',0)])
+def get_data_desktop():
+    year_to_run="2022"
+    os.chdir("C:/Users/SQLe/U.S. Small Business Administration/Office of Policy Planning and Liaison (OPPL) - Data Lake/")
 
-    # matchcols=["IDV_PIID","PIID","FUNDING_DEPARTMENT_ID"]
-    # detailcols=["FUNDING_DEPARTMENT_NAME","FUNDING_AGENCY_NAME","FUNDING_AGENCY_ID"]
-    # dolcols=["TOTAL_SB_ACT_ELIGIBLE_DOLLARS","SMALL_BUSINESS_DOLLARS","SDB_DOLLARS","WOSB_DOLLARS","CER_HUBZONE_SB_DOLLARS","SRDVOB_DOLLARS"]
-    # PYposDF=PY_pos.read(columns=matchcols).to_pandas()
-    # CYposDF=CY_pos.read(columns=matchcols+detailcols+dolcols).to_pandas()
-    # CYnegDF=CY_neg.read(columns=matchcols+detailcols+dolcols).to_pandas()
+    PY_pos=pq.ParquetDataset("./SBGR_parquet/SBGR_FY2021",
+                    filters=[('TOTAL_SB_ACT_ELIGIBLE_DOLLARS','>',0)])
+    CY_pos=pq.ParquetDataset("./Double_Credit/FY=2022"
+                    ,filters=[('TOTAL_SB_ACT_ELIGIBLE_DOLLARS','>',0)])
+    CY_neg=pq.ParquetDataset("./Double_Credit/FY=2022"
+                    ,filters=[('TOTAL_SB_ACT_ELIGIBLE_DOLLARS','<',0)])
+    matchcols=["IDV_PIID","PIID","FUNDING_DEPARTMENT_ID"]
+    detailcols=["FUNDING_DEPARTMENT_NAME","FUNDING_AGENCY_NAME","FUNDING_AGENCY_ID"]
+    dolcols=["TOTAL_SB_ACT_ELIGIBLE_DOLLARS","SMALL_BUSINESS_DOLLARS","SDB_DOLLARS","WOSB_DOLLARS","CER_HUBZONE_SB_DOLLARS","SRDVOB_DOLLARS"]
 
-    # compareDF=CYposDF[matchcols].merge(PYposDF,how="outer",indicator=True).drop_duplicates()
-    # compareDF["match"]=compareDF["_merge"].replace({'left_only':'2022+','right_only':'2021+'},)
-    # compareDF.drop("_merge",axis=1,inplace=True)
+    PYposDF=PY_pos.read(columns=matchcols).to_pandas().replace("NA", np.nan).apply(lambda x: x.astype("string"))
+    CYposDF=CY_pos.read(columns=matchcols+detailcols+dolcols).to_pandas().replace("NA", np.nan)
+    CYnegDF=CY_neg.read(columns=matchcols+detailcols+dolcols).to_pandas().replace("NA", np.nan)
 
-    # CYnegDF=CYnegDF.merge(compareDF,how="left",on=matchcols,indicator=True,copy=False)
 
-    # CYnegDF["STATUS"]=CYnegDF["_merge"].replace({'left_only':'exclude','both':'include'})
-    # CYnegDF.drop("_merge",axis=1,inplace=True)
+    compareDF=CYposDF[matchcols].apply(lambda x: x.astype("string")).merge(PYposDF,how="outer",indicator=True).drop_duplicates()
+    compareDF["match"]=compareDF["_merge"].replace({'left_only':'2022+','right_only':'2021+'},)
+    compareDF.drop("_merge",axis=1,inplace=True)
 
-    # CYpossum=CYposDF.groupby(["FUNDING_DEPARTMENT_NAME","FUNDING_DEPARTMENT_ID","FUNDING_AGENCY_NAME","FUNDING_AGENCY_ID"]
-    #                         ,as_index=False)[dolcols].sum()
+    CYnegDF=CYnegDF.merge(compareDF,how="left",on=matchcols,indicator=True,copy=False)
+
+    CYnegDF["STATUS"]=CYnegDF["_merge"].replace({'left_only':'exclude','both':'include'})
+    CYnegDF.drop("_merge",axis=1,inplace=True)
+
+    CYpossum=CYposDF.groupby(["FUNDING_DEPARTMENT_NAME","FUNDING_DEPARTMENT_ID","FUNDING_AGENCY_NAME","FUNDING_AGENCY_ID"]
+                            ,as_index=False)[dolcols].sum()
+    return CYnegDF, CYpossum
+
+def get_data():
     CYnegDF=pd.read_parquet("CYnegDF.parquet")
     CYpossum=pd.read_parquet("CYpossum.parquet")
     return CYnegDF, CYpossum
-    
-
+      
 # %% 
 #User input - year
 st.title("Deobligations Dashboard")
 year_to_run=st.sidebar.selectbox(label="Fiscal Year",options=(['2022'])) #enable more years here
 
-CY_neg,CY_pos =get_data(year_to_run)
+CY_neg,CY_pos =get_data()
+#%%
+def get_agency_achievements():
+    dolcols=["TOTAL_SB_ACT_ELIGIBLE_DOLLARS","SMALL_BUSINESS_DOLLARS","SDB_DOLLARS","WOSB_DOLLARS","CER_HUBZONE_SB_DOLLARS","SRDVOB_DOLLARS"]
+    CY_pos_dept=CY_pos.groupby(['FUNDING_DEPARTMENT_NAME'])[dolcols].sum()
+    CY_neg_dept=CY_neg.loc[CY_neg['STATUS']=="include"].groupby(
+        ['FUNDING_DEPARTMENT_NAME'])[dolcols].sum()
+    dept_sum=CY_pos_dept.add(CY_neg_dept)
+    return dept_sum
+
+#agency_achievements=get_agency_achievements()
+#agency_achievements.to_excel("agency_achivements_FY22.xlsx")
+#%%
+def get_agency_transactions(agency):
+    os.chdir("C:/Users/SQLe/U.S. Small Business Administration/Office of Policy Planning and Liaison (OPPL) - Data Lake/")
+
+    PY_pos=pq.ParquetDataset("./SBGR_parquet/FY=2021",
+                    filters=[('TOTAL_SB_ACT_ELIGIBLE_DOLLARS','>',0),('FUNDING_DEPARTMENT_NAME','==',agency)])
+    CY_pos=pq.ParquetDataset("./Double_Credit/FY=2022"
+                    ,filters=[('TOTAL_SB_ACT_ELIGIBLE_DOLLARS','>',0),('FUNDING_DEPARTMENT_NAME','==',agency)])
+    CY_neg=pq.ParquetDataset("./Double_Credit/FY=2022"
+                    ,filters=[('TOTAL_SB_ACT_ELIGIBLE_DOLLARS','<',0),('FUNDING_DEPARTMENT_NAME','==',agency)])
+    matchcols=["IDV_PIID","PIID","FUNDING_DEPARTMENT_ID"]
+    detailcols=["FUNDING_DEPARTMENT_NAME","FUNDING_AGENCY_NAME","FUNDING_AGENCY_ID","DATE_SIGNED","VENDOR_UEI"]
+    dolcols=["TOTAL_SB_ACT_ELIGIBLE_DOLLARS","SMALL_BUSINESS_DOLLARS","SDB_DOLLARS","WOSB_DOLLARS","CER_HUBZONE_SB_DOLLARS","SRDVOB_DOLLARS"]
+
+    PYposDF=PY_pos.read(columns=matchcols).to_pandas().replace("NA", np.nan).apply(lambda x: x.astype("string"))
+    CYposDF=CY_pos.read(columns=matchcols+detailcols+dolcols).to_pandas().replace("NA", np.nan)
+    CYnegDF=CY_neg.read(columns=matchcols+detailcols+dolcols).to_pandas().replace("NA", np.nan)
+
+    compareDF=CYposDF[matchcols].apply(lambda x: x.astype("string")).merge(PYposDF,how="outer",indicator=True).drop_duplicates()
+    compareDF["match"]=compareDF["_merge"].replace({'left_only':'2022+','right_only':'2021+'},)
+    compareDF.drop("_merge",axis=1,inplace=True)
+
+    CYnegDF=CYnegDF.merge(compareDF,how="left",on=matchcols,indicator=True,copy=False)
+
+    CYnegDF=CYnegDF[CYnegDF["_merge"]=='both']
+
+    return pd.concat([CYnegDF, CYposDF])
+
+VA=get_agency_transactions('VETERANS AFFAIRS, DEPARTMENT OF')
+VA.iloc[:,:14].sort_values(["DATE_SIGNED","PIID"]
+                           ).to_excel(
+    "C:/Users/SQLe/Data/VA_FY22_SBGR.xlsx",index=False)
+#%%
+#CY_pos.to_parquet("C:/Users/SQLe/U.S. Small Business Administration/OPPL Data - General/OPPL/CYpossum.parquet", index=False)
+#CY_neg.to_parquet("C:/Users/SQLe/U.S. Small Business Administration/OPPL Data - General/OPPL/CYnegDF.parquet", index=False)
 
 # %% 
 #User input - Department - Agency

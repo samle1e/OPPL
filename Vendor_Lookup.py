@@ -156,20 +156,20 @@ def show_FY_graph_table_set_asides (data_filter1, data_filter2):
 
         dollars_FY["FISCAL_YEAR"] = dollars_FY["FISCAL_YEAR"].astype(int)
     else:
-        dollars_FY=None
+        dollars_FY=pd.DataFrame(None)
 
     dollars_df2 = data_filter2.select(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE","DOLLARS_OBLIGATED","DATE_SIGNED"])
 
     if dollars_df2:
         dollars_ATOM=dollars_df2.to_pandas()
-        dollars_ATOM["FISCAL_YEAR"] = [x.year if x.month<10 else x.year + 1 for x in dollars_ATOM["DATE_SIGNED"]]
+        dollars_ATOM["FISCAL_YEAR"] = [int(x.year) if x.month<10 else int(x.year) + 1 for x in dollars_ATOM["DATE_SIGNED"]]
         dollars_ATOM_gp = dollars_ATOM.groupby(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE","FISCAL_YEAR"] ,as_index=False ,dropna=False
                                            ).sum()
     else:
-        dollars_ATOM_gp = None
+        dollars_ATOM_gp = pd.DataFrame(None)
 
     try:
-        dollars_FY = pd.concat([dollars_FY,dollars_ATOM_gp],ignore_index=True)
+        dollars_FY = pd.concat([dollars_FY,dollars_ATOM_gp],ignore_index=True) # type: ignore
 
         dollars_FY["set_aside"] = [x if x in SBA_socio_asides else y if y in SBA_set_asides else x 
                                for x,y in zip(dollars_FY["TYPE_OF_SET_ASIDE"],dollars_FY["IDV_TYPE_OF_SET_ASIDE"]) ]
@@ -184,7 +184,7 @@ def show_FY_graph_table_set_asides (data_filter1, data_filter2):
             ).reset_index(drop=True)
         dollars_FY["Set Aside"] = dollars_FY["Set Aside"].map(set_aside_dict).fillna("No set aside")
     except:
-        dollars_FY=None
+        dollars_FY=pd.DataFrame(None)
 
     fig = None
 
@@ -199,13 +199,12 @@ def show_FY_graph_table_set_asides (data_filter1, data_filter2):
             fig=px.line(dollars_FY,x="FY",y="Dollars Obligated",color="Set Aside"
                     ,color_discrete_sequence=px.colors.qualitative.Dark24, markers=True)
         except: pass
-    try: 
+    if fig is not None: 
         fig.update_layout(xaxis={
             'range': [dollars_FY["FY"].min(), dollars_FY["FY"].max()], 
             'tickvals': [*range(int(dollars_FY["FY"].min()), int(dollars_FY["FY"].max())+2)]
             })
         st.plotly_chart(fig)
-    except: pass
 
     st.dataframe(dollars_FY.style.format({"FY":'{:.0f}',"Dollars Obligated": '${:,.0f}'}), use_container_width=True)
     st.write("")
@@ -224,7 +223,8 @@ def download_option (data_filter1, data_filter2):
         data_df = data1.to_pandas()
         data_df["VENDOR_NAME"] = data_df["VENDOR_NAME"].fillna(data_df["UEI_NAME"])
         data_df.drop(["UEI_NAME"],axis=1,inplace=True)
-    except: pass
+    except: data_df = pd.DataFrame(None)
+
     if data_filter2.count()>0:
         data2 = data_filter2.select(vendorcols2 + agencycols + contract_cols + dolcols)
         data_df2 = data2.to_pandas().rename(columns={"VENDOR_UEI_NUMBER":"VENDOR_UEI"})
