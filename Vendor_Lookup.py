@@ -163,9 +163,7 @@ def show_FY_graph_table_set_asides (data_filter1, data_filter2):
     if dollars_df2:
         dollars_ATOM=dollars_df2.to_pandas()
         dollars_ATOM["FISCAL_YEAR"] = [int(x.year) if int(x.month) < 10 else int(x.year) + 1 for x in dollars_ATOM["DATE_SIGNED"]]
-        st.write(dollars_ATOM.dtypes)
-
-        dollars_ATOM_gp = dollars_ATOM.groupby(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE","FISCAL_YEAR"] ,as_index=False ,dropna=False
+        dollars_ATOM_gp = dollars_ATOM.drop("DATE_SIGNED", axis=1).groupby(["TYPE_OF_SET_ASIDE","IDV_TYPE_OF_SET_ASIDE","FISCAL_YEAR"] ,as_index=False ,dropna=False
                                            ).sum()
     else:
         dollars_ATOM_gp = pd.DataFrame(None)
@@ -255,3 +253,5 @@ if __name__ == '__main__':
         download_option (data1, data2)
     
     st.caption("Source: SBA Small Business Goaling Report for FY09-FY22; ATOM Feed for later data")
+
+# %%
