@@ -82,6 +82,7 @@ def filter_set_aside_type (data):
                     'HS3':'8(a) with HUB Zone Preference',
                     'HZC':'HUBZone Set-Aside',
                     'HZS':'HUBZone Sole Source',
+                    'HZE':'HUBZone Price Evaluation Preference',
                     'SDVOSBS':'SDVOSB Sole Source',
                     'SDVOSBC':'Service Disabled VOSB Set-Aside',
                     'WOSB':'Women Owned Small Business Set-Aside',
@@ -95,9 +96,12 @@ def filter_set_aside_type (data):
                                            ,choices)
     setaside_select_rev = [set_aside_dict_rev[x] for x in setaside_select]
 
+
+
     if len(setaside_select) != 0:
         df_for_in = session.create_dataframe(setaside_select_rev, schema=["col1"])
-        data = [x.filter((x["TYPE_OF_SET_ASIDE"].isin(df_for_in)) | (x["IDV_TYPE_OF_SET_ASIDE"].isin(df_for_in))) 
+        data = [x.filter((x["TYPE_OF_SET_ASIDE"].isin(df_for_in)) | (x["IDV_TYPE_OF_SET_ASIDE"].isin(df_for_in)) |
+                         (x["EVALUATED_PREFERENCE"].isin(df_for_in))) 
                     for x in data]    
     return data
 
