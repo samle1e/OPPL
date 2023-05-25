@@ -189,7 +189,7 @@ def show_FY_graph_table_set_asides (data_filter1, data_filter2):
     fig = None
 
     if st.checkbox ("Collapse Set-Asides") and ~dollars_FY.empty:
-        dollars_FY = dollars_FY.groupby("FY",as_index=False).sum()
+        dollars_FY = dollars_FY.groupby("FY",as_index=False).sum(numeric_only=True)
         try:
             fig=px.line(dollars_FY,x="FY",y="Dollars Obligated"
                     ,color_discrete_sequence=px.colors.qualitative.Dark24, markers=True)
