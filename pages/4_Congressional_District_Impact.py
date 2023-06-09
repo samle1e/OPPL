@@ -288,7 +288,8 @@ def global_var():
                 "SDB_DOLLARS":"SDB Dollars",
                 "WOSB_DOLLARS":"Women-Owned Small Bus. Dollars",
                 "SRDVOB_DOLLARS": "Serv-Disbld Vet-Owned Small Bus. Dollars",
-                "CER_HUBZONE_SB_DOLLARS": "HUBZone Dollars",}
+                "CER_HUBZONE_SB_DOLLARS": "HUBZone Dollars",
+                "VOSB_DOLLARS": "Veteran-Owned Small Bus. Dollars",}
 
         dolcols = [k for k,v in doldict.items()]
 
@@ -381,6 +382,7 @@ def dist_SAM (data_SAM):
     dist_SAM_filt['8(A)'] = dist_SAM_filt['SBA_BUSINESS_TYPES_STRING'].str.contains("A6|JT")
     dist_SAM_filt['WOSB (self-cert)'] = dist_SAM_filt['BUS_TYPE_STRING'].str.contains("8W")
     dist_SAM_filt['SDVOSB (self-cert)'] = dist_SAM_filt['BUS_TYPE_STRING'].str.contains("QF")
+    dist_SAM_filt['VOSB (self-cert)'] = dist_SAM_filt['BUS_TYPE_STRING'].str.contains("A5")
     dist_SAM_filt['HUBZone'] = dist_SAM_filt['SBA_BUSINESS_TYPES_STRING'].str.contains("XX")
     dist_SAM_filt['Minority Owned'] = dist_SAM_filt['BUS_TYPE_STRING'].str.contains("23")
     dist_SAM_filt['Black American Owned'] = dist_SAM_filt['BUS_TYPE_STRING'].str.contains("OY")
