@@ -82,7 +82,7 @@ def get_table (DUNS_list, UEI_list):
         FROM VENDOR_LOOKUP
         WHERE VENDOR_UEI in (%(UEI_list)s) OR VENDOR_DUNS_NUMBER IN (%(DUNS_list)s)
         GROUP BY FY, CASE WHEN TYPE_OF_SET_ASIDE IS NULL THEN 'NO SET ASIDE USED.' ELSE TYPE_OF_SET_ASIDE END
-        ORDER BY 1
+        ORDER BY 1, 2
         ''',{'UEI_list':UEI_tuple, 'DUNS_list':DUNS_tuple}
                 ).fetch_pandas_all()
     #need to map results set-aside type
