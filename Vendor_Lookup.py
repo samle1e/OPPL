@@ -132,7 +132,7 @@ def download_option (DUNS_list, UEI_list, start_year:int, end_year:int):
             FROM VENDOR_LOOKUP
             WHERE (VENDOR_UEI in (%(UEI_list)s) OR VENDOR_DUNS_NUMBER IN (%(DUNS_list)s))
             and FY>=(%(year_0)s) and FY<=(%(year_1)s)
-            ORDER BY DATE_SIGNED
+            ORDER BY FY, DATE_SIGNED
             ''',{'UEI_list':UEI_tuple, 'DUNS_list':DUNS_tuple, 'year_0':years[0], 'year_1':years[1]}
                     ).fetch_pandas_all()
         try:
