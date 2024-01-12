@@ -153,6 +153,6 @@ if __name__ == '__main__':
     
     st.caption('''<p>Enter DUNs or UEIs to the left, or upload a file with a list of DUNs or UEIs.</p>
     <p>The app automatically matches DUNs to UEIs and vice-versa based on a crosswalk from the April 2022 switchover.</p>
-    <p>Source: SBA Small Business Goaling Report for FY09-FY22, Preliminary SBGR for FY23, ATOM Feed for FY24''')</p>
+    <p>Source: SBA Small Business Goaling Report for FY09-FY22, Preliminary SBGR for FY23, ATOM Feed for FY24</p>''')
 
 # %%
