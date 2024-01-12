@@ -76,17 +76,14 @@ def get_table (DUNS_list, UEI_list):
     DUNS_tuple = tuple(DUNS_list)
 
     results = cursor.execute('''SELECT FY, 
-            CASE WHEN TYPE_OF_SET_ASIDE IS NULL THEN 'NO SET ASIDE USED.'
-            ELSE TYPE_OF_SET_ASIDE END as "Set Aside", 
+            IFF(TYPE_OF_SET_ASIDE IS NULL or TYPE_OF_SET_ASIDE = 'NO SET ASIDE USED.', 'NONE', TYPE_OF_SET_ASIDE) as "Set Aside", 
             sum(DOLLARS_OBLIGATED) as "Dollars Obligated"
         FROM VENDOR_LOOKUP
         WHERE VENDOR_UEI in (%(UEI_list)s) OR VENDOR_DUNS_NUMBER IN (%(DUNS_list)s)
-        GROUP BY FY, CASE WHEN TYPE_OF_SET_ASIDE IS NULL THEN 'NO SET ASIDE USED.' ELSE TYPE_OF_SET_ASIDE END
+        GROUP BY FY, IFF(TYPE_OF_SET_ASIDE IS NULL or TYPE_OF_SET_ASIDE = 'NO SET ASIDE USED.', 'NONE', TYPE_OF_SET_ASIDE)
         ORDER BY 1, 2
         ''',{'UEI_list':UEI_tuple, 'DUNS_list':DUNS_tuple}
                 ).fetch_pandas_all()
-    #need to map results set-aside type
-
     return results
 #%%
    
@@ -108,12 +105,14 @@ def show_FY_graph_table_set_asides (results):
                     ,color_discrete_sequence=px.colors.qualitative.Dark24, markers=True)
         except: pass
     if fig is not None: 
-        fig.update_layout(xaxis={
-            'range': [dollars_FY["FY"].min(), dollars_FY["FY"].max()], 
-            'tickvals': [*range(int(dollars_FY["FY"].min()), int(dollars_FY["FY"].max())+2)]
-            })
-        st.plotly_chart(fig)
-
+        try:
+            fig.update_layout(xaxis={
+                'range': [dollars_FY["FY"].min(), dollars_FY["FY"].max()], 
+                'tickvals': [*range(int(dollars_FY["FY"].min()), int(dollars_FY["FY"].max())+2)]
+                })
+            st.plotly_chart(fig)
+        except: pass
+    
     st.dataframe(dollars_FY.style.format({"FY":'{:.0f}',"Dollars Obligated": '${:,.0f}'}), hide_index=True)
     st.write("")
     
@@ -152,6 +151,7 @@ if __name__ == '__main__':
         show_FY_graph_table_set_asides (results)
         download_option (DUNS_list, UEI_list, start_year, end_year)
     
-    st.caption("Source: SBA Small Business Goaling Report for FY09-FY22, Preliminary SBGR for FY23, ATOM Feed for FY24")
+    st.caption('''Enter DUNs or UEIs to the left, or upload a file with a list of DUNs or UEIs. The app automatically matches DUNs to UEIs and vice-versa based on a crosswalk from the April 2022 switchover.<br>
+    Source: SBA Small Business Goaling Report for FY09-FY22, Preliminary SBGR for FY23, ATOM Feed for FY24''')
 
 # %%
