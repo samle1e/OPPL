@@ -4,8 +4,12 @@ from snowflake.connector import connect
 import streamlit as st
 import plotly.express as px
 from pyarrow.compute import field
+#import duckdb
 
-page_title= "SBA Set-Aside Tracker"
+page_title = "SBA Set-Asides"
+top_caption_text = '''This report shows the set asides awarded by Federal Departments and Federal Agencies by Fiscal Year. Options include filter by Department, Agency, or NAICS code, or viewing the results as either a dollar amount or a percentage of dollars awarded to a selected self-certified group.'''
+    
+bottom_caption_text = '''Source:  SBA Small Business Goaling Reports.\n  Dollars are scorecard-eligible dollars after applying the exclusions on the [SAM.gov Small Business Goaling Report Appendix](https://sam.gov/reports/awards/standard/F65016DF4F1677AE852B4DACC7465025/view) (login required). This does not reflect adjustments used solely for the SBA scorecard, such as double-credit and Department of Energy subcontracting.'''
 
 st.set_page_config(
     page_title= page_title,
@@ -20,185 +24,182 @@ hide_streamlit_style = """
             </style>
             """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
+con = connect(**st.secrets.snowflake_credentials)
+cursor = con.cursor()
 
-#%%
-basiccols=['EVALUATED_PREFERENCE','TYPE_OF_SET_ASIDE','IDV_TYPE_OF_SET_ASIDE','FUNDING_DEPARTMENT_NAME','FUNDING_AGENCY_NAME']
-dolcols=["TOTAL_SB_ACT_ELIGIBLE_DOLLARS","SMALL_BUSINESS_DOLLARS","SDB_DOLLARS","WOSB_DOLLARS","CER_HUBZONE_SB_DOLLARS","SRDVOB_DOLLARS","EIGHT_A_PROCEDURE_DOLLARS"]
-entitycols=['INDIAN_TRIBE','TRIBALLY_OWNED','ALASKAN_NATIVE_CORPORATION','AIOB_FLAG','NATIVE_HAWAIIAN_ORGANIZATION']
-doublecols=['VENDOR_ADDRESS_STATE_NAME','LOCAL_AREA_SET_ASIDE','CO_BUS_SIZE_DETERMINATION']
-contractctcols=['MODIFICATION_NUMBER','AWARD_OR_IDV','MULTIPLE_OR_SINGLE_AWARD_IDC','IDV_MUL_OR_SINGLE_AWARD_IDC','IDV_MUL_OR_SINGLE_COMP','ULTIMATE_CONTRACT_VALUE']
+### table attributes
 
-#%%
-@st.cache_data
-def get_data ():    
-    con = connect(**st.secrets['snowflake_credentials'])
-    cursor = con.cursor()
-    sql_query = f'''select CAST(FISCAL_YEAR as int) FY, 
-    {', '.join([f"sum({x})" for x in dolcols])},
-      {', '.join(basiccols + entitycols + doublecols)} from
-      SMALL_BUSINESS_GOALING
-      group by FISCAL_YEAR, {', '.join(basiccols + entitycols + doublecols)}'''
-    cursor.execute(sql_query)
-    results = cursor.fetch_arrow_all()
-    cursor.close()
+tb_name = 'STREAMLIT_SET_ASIDES'
+linked_cols = {'FUNDING_DEPARTMENT_NAME':'FUNDING_AGENCY_NAME', 'STATE_NAME':'CD'}
+dolcols = ['All_Awardees',
+ 'Small_Business_Concerns',
+ 'Small_Disadvantaged_Businesses',
+ 'Women_Owned_Small_Businesses',
+ 'HUBZone_Small_Businesses',
+ 'Service_Disabled_Veteran_Owned_Small_Businesses',
+ 'Tribally_Owned_Small_Businesses',
+ 'NHO_Owned_Small_Businesses',
+ 'ANC_Owned_Small_Businesses',
+ 'Tribally_NHO_or_ANC_Owned_Small_Businesses']
+dolcols=[col.upper() for col in dolcols] #needed for snowflake
+group_by_col = 'FISCAL_YEAR'
+special_treat = 'SET_ASIDE_TYPE'
+
+### Connect to DUCKDB for testing
+# duckdb_con = duckdb.connect()
+# duckdb_con.execute('''
+#     CREATE OR REPLACE TABLE streamlit_set_aside as 
+#     (from read_parquet('streamlit_set_aside_test.parquet'))
+# ''')
+# cursor = duckdb_con.cursor()
+    
+#@st.cache_resource
+def get_data (query, params=None):
+    if params:
+        cursor.execute(query, params)
+    else: 
+        cursor.execute(query)
+    results = cursor.fetch_pandas_all()
+    #results = cursor.df()
     return results
 
-#%%
-def filter_set_asides (data):
-      set_aside_dict={
-            "SBA":"Small Business Set-Aside",
-            "RSB":"Small Business Set-Aside",
-            "ESB":"Small Business Set-Aside",
-            "SBP":"Partial SB Set-Aside",
-            "8A":"8(a) Competitive",
-            "8AN":"8(a) Sole Source",
-            "WOSB":"WOSB Set-Aside",
-            "WOSBSS":"WOSB Sole Source",
-            "EDWOSB":"EDWOSB Set-Aside",
-            "EDWOSBSS":"EDWOSB Sole Source",
-            "SDVOSBC":"SDVOSB Set-Aside",
-            "SDVOSBS":"SDVOSB Sole Source",
-            "HS3":"HUBZone Set-Aside",
-            "HZC":"HUBZone Set-Aside",
-            "HZS":"HUBZone Sole Source",
-            'HZE':'HUBZone Price Evaluation Preference', #not a set-aside, is evaluated_preference
-      }
-      set_aside_types = list({v:k for (k,v) in set_aside_dict.items()}.keys()) #returns ordered items
-      select_set_aside = st.sidebar.multiselect("Select Set-Aside Types", set_aside_types, default = set_aside_types ,key='set_aside')
-      set_aside_list = [k for (k,v) in set_aside_dict.items() if v in select_set_aside]
-      if set_aside_list:
-            data = (data
-                  .filter(field('TYPE_OF_SET_ASIDE').isin(set_aside_list) | 
-                        field('IDV_TYPE_OF_SET_ASIDE').isin(set_aside_list) |
-                        field('EVALUATED_PREFERENCE').isin(set_aside_list))
-            )
-      return data
+#@st.cache_data
+def get_columns():
+    query = "select COLUMN_NAME from information_schema.columns where table_name = %s"
+    #query = "select COLUMN_NAME from information_schema.columns where table_name = ?"    
+    cols = get_data(query, (tb_name)).squeeze().to_list()
+    #cols = get_data(query, [tb_name]).squeeze().to_list()
+    return cols
 
-def filter_entity_owned (data):
-      if st.sidebar.checkbox("Limit to ANC/NHO/Tribal Owned?", key = 'entity'):
-          data = (data.filter((field('ALASKAN_NATIVE_CORPORATION') == 'YES') | 
-                  (field('ALASKAN_NATIVE_CORPORATION') == 'YES') |
-                  (field('INDIAN_TRIBE') == 'YES')|
-                  (field('TRIBALLY_OWNED') == 'YES')| 
-                  (field('AIOB_FLAG') == 'YES'))
-          )
-      return data
-#%%
-def dept_office_list (data):
-      groupcols= ['FUNDING_DEPARTMENT_NAME','FUNDING_AGENCY_NAME']
-      office_list = (data.group_by(groupcols)
-                    .aggregate([("TYPE_OF_SET_ASIDE", "count")])
-                    .to_pandas()
-                    .sort_values(groupcols))
-      return office_list
+#@st.cache_data
+def get_filters(cols, linked_cols):
+    filters = {}
+    for col in cols:
+        if col not in dolcols and col != group_by_col:
+            if (col not in linked_cols.keys()) and (col not in linked_cols.values()):
+                query = f"select distinct {col} from {tb_name}"
+                options = get_data(query).squeeze().sort_values().to_list()
+                filters[col]=options
+            elif col in linked_cols.keys():
+                query = f"select distinct {col}, {linked_cols[col]} from {tb_name}"
+                options_tbl = get_data(query)
+                options_dict = options_tbl.groupby(col)[linked_cols[col]].apply(list).sort_values().to_dict()
+                filters[col] = options_dict
+    filters = dict(sorted(filters.items()))
+    return filters
 
-def filter_department (data):
-      office_list = dept_office_list(data)
-      #select
-      dept_options = office_list['FUNDING_DEPARTMENT_NAME'].drop_duplicates().tolist()
-      select_department = st.sidebar.multiselect("Select Departments", dept_options, key='dept')
-      
-      if (len(select_department)==1):
-            agency_options = office_list.loc[office_list['FUNDING_DEPARTMENT_NAME']==select_department[0],'FUNDING_AGENCY_NAME'].drop_duplicates().tolist()
-      else:
-           agency_options = []
-      select_agency = st.sidebar.multiselect("Select Agencies", agency_options,key='agency'
-                                             , disabled=(len(select_department)!=1))
-      #filter
-      if (select_agency): 
-            data = data.filter(field('FUNDING_DEPARTMENT_NAME').isin(select_department) & 
-                              field('FUNDING_AGENCY_NAME').isin(select_agency))
-      elif (select_department):
-            data = data.filter(field('FUNDING_DEPARTMENT_NAME').isin(select_department))
-      return data
+def special_treatment(filt, filt_options):
+    exclude = ['Non-SBA sole source', 'Non-SBA set-aside', 'Not set aside']
+    default = [i for i in filt_options if i not in exclude]
+    selections = st.sidebar.multiselect(
+                filt.replace('_',' ').title(), filt_options, default=default)
+    return selections
 
-def display_dollars (dollars_data):
-      dollars_df = (dollars_data
-                    .group_by(["FY"])
-                    .aggregate([("SUM(TOTAL_SB_ACT_ELIGIBLE_DOLLARS)", "sum")])
-                    .to_pandas()
-                    .set_index("FY")
-                    .sort_index()
-      )
-      dollars_df.columns=['Obligated Dollars']
-      pal = ["#002e6d", "#cc0000", "#969696", "#007dbc", "#197e4e", "#f1c400"]
-      #st.write(dollars_df)
-      if ~dollars_df.empty:
-            fig=px.bar(dollars_df,x=dollars_df.index,y=dollars_df['Obligated Dollars']
-                  ,color_discrete_sequence=pal)
-            st.plotly_chart(fig)
-            st.write(dollars_df.reset_index().style.format({'Obligated Dollars': '${:,.0f}'}).hide(axis="index").to_html(
-                  ),unsafe_allow_html=True)
+def filter_sidebar(filters, linked_cols, special_treat):
+    st.sidebar.header("Choose Your Filters:")
+    selections = {}
+    selections[special_treat] = special_treatment(special_treat, filters[special_treat])
 
-def select_denominator_and_double (dollars_data, dept_data):   
-      dollars_dict={
-            "Total Dollars":"TOTAL_SB_ACT_ELIGIBLE_DOLLARS",
-            "Small Business Dollars":"SMALL_BUSINESS_DOLLARS",
-            "SDB Dollars":"SDB_DOLLARS",
-            "WOSB Dollars":"WOSB_DOLLARS",
-            "HUBZone Dollars":"CER_HUBZONE_SB_DOLLARS",
-            "SDVOSB Dollars":"SRDVOB_DOLLARS",
-            "8(a) Procedure Dollars":"EIGHT_A_PROCEDURE_DOLLARS",
-      }
-      select_dollars = st.sidebar.radio("As a percentage of what (i.e., denominator)?",list(dollars_dict),key = 'denominator')
-      
-      dollars_sum, dept_sum = (x
-                    .group_by(["FY"])
-                    .aggregate([(f"SUM({dollars_dict[select_dollars]})", "sum")])
-                    .to_pandas()
-                    .set_index("FY")
-                    .sort_index() for x in (dollars_data, dept_data))
+    for filt in filters.keys():
+        if filt not in linked_cols.keys() and filt not in [group_by_col, special_treat]:
+            display = filt.replace('_',' ').title() if filt != 'NAICS' else filt
+            selections[filt] = st.sidebar.multiselect(display, filters[filt], default=[]) 
+        elif filt in linked_cols.keys():
+            selections[filt] = st.sidebar.multiselect(
+                filt.replace('_',' ').title(), filters[filt].keys())
+            if len(selections[filt]) == 1:
+                options=filters[filt][selections[filt][0]]
+            else: options=[]
+            
+            selections[linked_cols[filt]] = st.sidebar.multiselect(
+                linked_cols[filt].replace('_',' ').title(), options, disabled = len(options)==0)
+    return selections
 
-      if st.sidebar.checkbox("Apply Scorecard Double Credit?", key = 'double'):
-            territories = ['NORTHERN MARIANA ISLANDS', 'GUAM', 'VIRGIN ISLANDS OF THE U.S.', 'AMERICAN SAMOA', 'PUERTO RICO']
-            dollars_adjust, dept_adjust = (x
-                    .filter(((field('VENDOR_ADDRESS_STATE_NAME') == 'PUERTO RICO') & (field('FY')==2019)) |
-                        ((field('VENDOR_ADDRESS_STATE_NAME').isin(territories)) & (field('FY')>=2020) & (field('FY')<=2022)) |
-                        (field('LOCAL_AREA_SET_ASIDE')=="Y") & (field('CO_BUS_SIZE_DETERMINATION')=="SMALL BUSINESS") & (field('FY')>=2020))
-                    .group_by(["FY"])
-                    .aggregate([(f"SUM({dollars_dict[select_dollars]})", "sum")])
-                    .to_pandas()
-                    .set_index("FY")
-                    .sort_index() for x in (dollars_data, dept_data))
-            dollars_sum = dollars_sum.add(dollars_adjust, fill_value = 0)
-            if select_dollars !=  "Total Dollars": #we don't double credit for total dollars
-                  dept_sum = dept_sum.add(dept_adjust, fill_value = 0)     
-      return dollars_sum, dept_sum, select_dollars
+def select_dollars (dolcols):
+    options = [col.replace('_',' ') for col in dolcols]
+    dollars = st.radio('Show only awards made to:', options = options).replace(' ','_')
+    return dollars
 
-def display_percent (dollars_sum, dept_sum, select_dollars):
-      df_pct = dollars_sum.join(dept_sum, rsuffix='dept')
-      df_pct['pct'] = df_pct.iloc[:,0].div(df_pct.iloc[:,1], fill_value=1)
-      df_pct.columns = [f"Set-Aside {select_dollars}","Total",f"% of All {select_dollars}"]
-      col1 = df_pct.columns[0]
-      try: 
-            col2=df_pct.columns[2]
-      except: col2 = None
-      pal = ["#002e6d", "#cc0000", "#969696", "#007dbc", "#197e4e", "#f1c400"]
+def select_dollars_or_percent():
+    options = ['Dollars', 'Percentage of All Awards to Group Selected Above', 
+               'Percentage of Awards to All Awardees']
+    dollars_or_percent=st.radio('Display in:', options=options)
+    return dollars_or_percent
+    
+def get_table(cols, selections, dollars, dollars_or_percent):
+    cols_small = [col for col in cols if col not in dolcols and col != group_by_col]
 
-      if col2:
-            fig=px.line(df_pct,x=df_pct.index,y=col2,color_discrete_sequence=pal, labels={'FY':'Fiscal Year'})
-            st.plotly_chart(fig)
+    filters = {}
+    for col in cols_small:
+        if col in selections.keys() and len(selections[col])>0:
+            filters[col] = selections[col]
+    if len(filters)>0: 
+        filters = {k:tuple(v) for k,v in filters.items() if len(v)>0}
 
-            st.write(df_pct.loc[:,[col1,col2]].reset_index().style.format({col1: '${:,.0f}',col2: '{:.2%}'}).hide(axis="index").to_html(
-             ),unsafe_allow_html=True)
+    if dollars_or_percent == 'Percentage of Awards to All Awardees':
+        dolcols_str = f'sum({dollars}) as {dollars}, sum(ALL_AWARDEES) as ALL_AWARDEES, sum({dollars})/sum(ALL_AWARDEES) as PERCENT'
+    elif dollars_or_percent == 'Percentage of All Awards to Group Selected Above':
+        dolcols_str = f'''sum({dollars}) as {dollars}, 
+            sum(iff(SET_ASIDE_TYPE in {filters['SET_ASIDE_TYPE']}, {dollars},0)) as {dollars}_with_Set_Aside_Type, 
+            sum(iff(SET_ASIDE_TYPE in {filters['SET_ASIDE_TYPE']}, {dollars},0)) / sum({dollars}) as Percent'''
+    else:
+        dolcols_str = f'sum({dollars}) as {dollars}'
+    
+    if dollars_or_percent == 'Percentage of All Awards to Group Selected Above':
+        where_str = ''.join([f'{k} in {v} and ' for k,v in filters.items() if k != 'SET_ASIDE_TYPE'])
+    else:
+        where_str = ''.join([f'{k} in {v} and ' for k,v in filters.items()])      
+    
+    query = f"select {group_by_col}, {dolcols_str} from {tb_name} where {where_str} 1=1 group by {group_by_col} order by 1"
+   
+    table = get_data(query).set_index(group_by_col)
+    return table
+
+def display_dollars (table, dollars):
+    dollars_srs = table[dollars]
+    dollars_srs.name = dollars.replace('_',' ')
+    pal = ["#002e6d", "#cc0000", "#969696", "#007dbc", "#197e4e", "#f1c400"]
+
+    if ~dollars_srs.empty:
+        fig=px.bar(dollars_srs,x=dollars_srs.index,y=dollars_srs,color_discrete_sequence=pal, labels={'y':dollars_srs.name})
+        st.plotly_chart(fig)
+        st.write(dollars_srs.to_frame().reset_index().style.format({dollars_srs.name: '${:,.0f}'}).hide(axis="index")\
+                   .to_html(),unsafe_allow_html=True)
+    else:
+        st.write('No Data.')
+
+def display_pct (table, dollars):  
+    table = table.rename(columns = lambda c:c.replace('_',' '))
+    pal = ["#002e6d", "#cc0000", "#969696", "#007dbc", "#197e4e", "#f1c400"]
+
+    def col_types(cols):
+        dict = {'PERCENT':'{:.2%}'}
+        for col in cols:
+            if col=='FISCAL_YEAR': pass
+            elif col!='PERCENT':  dict[col]='${:,.0f}'
+        return dict
+    
+    if len(table) > 0:
+        fig=px.line(table,x=table.index,y=table['PERCENT'],color_discrete_sequence=pal)
+        st.plotly_chart(fig)
+        st.write(table.reset_index().style.format(col_types(table.columns.to_list())).hide(axis="index")\
+             .to_html(),unsafe_allow_html=True)
+    else:
+        st.write('No Data.')
 
 if __name__ == "__main__":
-      st.header(page_title)
-      data = get_data()
-      dept_data = filter_department (data)
-      dollars_data = filter_set_asides (dept_data)
-      dollars_data = filter_entity_owned (dollars_data)
-      DorP=st.sidebar.radio("Dollars or Percentage?",('Dollars','Percentage'), key='dollars')
-      if DorP == 'Dollars':
-          display_dollars (dollars_data)
-      else:
-          dollars_sum, dept_sum, select_dollars  = select_denominator_and_double (dollars_data, dept_data) 
-          display_percent (dollars_sum, dept_sum, select_dollars)
-
-      st.caption('''
-      Source:  SBA Small Business Goaling Reports.\n
-      8(a) procedure dollars are a subset of SDB Dollars. SDB Dollars includes 8(a) procedure dollars and other awards to SDBs.\n
-      Abbreviations: SDB - Small Disadvantaged Business, WOSB - Women-owned small business, EDWOSB - Economically Disadvantaged women-owned small business, HUBZone - Historically Underutilized Business Zone, SDVOSB - Service-disabled veteran-owned small business
-      , ANC - Alaska-Native Corporation, NHO - Native Hawaiian Organization.\n
-      Total dollars are total scorecard-eligible dollars after applying the exclusions on the [SAM.gov Small Business Goaling Report Appendix](https://sam.gov/reports/awards/standard/F65016DF4F1677AE852B4DACC7465025/view) (login required). 
-      ''')
+    st.header(page_title)
+    st.caption(top_caption_text)
+    cols=get_columns()
+    filters = get_filters(cols, linked_cols)
+    selections = filter_sidebar(filters, linked_cols, special_treat)
+    
+    dollars = select_dollars (dolcols)
+    dollars_or_percent = select_dollars_or_percent()
+    
+    table = get_table(cols, selections, dollars, dollars_or_percent)
+    if dollars_or_percent=='Dollars':
+        display_dollars (table, dollars)
+    else:
+        display_pct (table, dollars)
+    st.caption(bottom_caption_text)
