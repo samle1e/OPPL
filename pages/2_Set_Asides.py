@@ -7,7 +7,8 @@ from pyarrow.compute import field
 #import duckdb
 
 page_title = "SBA Set-Asides"
-top_caption_text = '''This report shows the set asides awarded by Federal Departments and Federal Agencies by Fiscal Year. Options include filter by Department, Agency, or NAICS code, or viewing the results as either a dollar amount or a percentage of dollars awarded to a selected self-certified group.'''
+top_caption_text = '''This report shows the set asides awarded by Federal Departments and Federal Agencies by Fiscal Year. Options include filtering by Department, Agency, or NAICS code, and viewing the results as a dollar amount, the percentage within the selected set-aside categories of all the dollars to the selected group, or the percentage to 
+the selected group of all the dollars awarded within the selected set-aside categories.'''
     
 bottom_caption_text = '''Source:  SBA Small Business Goaling Reports.\n  Dollars are scorecard-eligible dollars after applying the exclusions on the [SAM.gov Small Business Goaling Report Appendix](https://sam.gov/reports/awards/standard/F65016DF4F1677AE852B4DACC7465025/view) (login required). This does not reflect adjustments used solely for the SBA scorecard, such as double-credit and Department of Energy subcontracting.'''
 
@@ -31,17 +32,17 @@ cursor = con.cursor()
 
 tb_name = 'STREAMLIT_SET_ASIDES'
 linked_cols = {'FUNDING_DEPARTMENT_NAME':'FUNDING_AGENCY_NAME', 'STATE_NAME':'CD'}
-dolcols = ['All_Awardees',
- 'Small_Business_Concerns',
- 'Small_Disadvantaged_Businesses',
- 'Women_Owned_Small_Businesses',
- 'HUBZone_Small_Businesses',
- 'Service_Disabled_Veteran_Owned_Small_Businesses',
- 'Tribally_Owned_Small_Businesses',
- 'NHO_Owned_Small_Businesses',
- 'ANC_Owned_Small_Businesses',
- 'Tribally_NHO_or_ANC_Owned_Small_Businesses']
-dolcols=[col.upper() for col in dolcols] #needed for snowflake
+dolcols_styled = ['All Awardees',
+ 'Small Business Concerns',
+ 'Small Disadvantaged Businesses',
+ 'Women Owned Small Businesses',
+ 'HUBZone Small Businesses',
+ 'Service Disabled Veteran Owned Small Businesses',
+ 'Tribally Owned Small Businesses',
+ 'NHO Owned Small Businesses',
+ 'ANC Owned Small Businesses',
+ 'Tribally NHO or ANC Owned Small Businesses']
+dolcols={col:col.upper().replace(' ','_') for col in dolcols_styled} #needed for snowflake
 group_by_col = 'FISCAL_YEAR'
 special_treat = 'SET_ASIDE_TYPE'
 
@@ -53,7 +54,7 @@ special_treat = 'SET_ASIDE_TYPE'
 # ''')
 # cursor = duckdb_con.cursor()
     
-#@st.cache_resource
+@st.cache_resource
 def get_data (query, params=None):
     if params:
         cursor.execute(query, params)
@@ -63,7 +64,7 @@ def get_data (query, params=None):
     #results = cursor.df()
     return results
 
-#@st.cache_data
+@st.cache_data
 def get_columns():
     query = "select COLUMN_NAME from information_schema.columns where table_name = %s"
     #query = "select COLUMN_NAME from information_schema.columns where table_name = ?"    
@@ -71,11 +72,11 @@ def get_columns():
     #cols = get_data(query, [tb_name]).squeeze().to_list()
     return cols
 
-#@st.cache_data
+@st.cache_data
 def get_filters(cols, linked_cols):
     filters = {}
     for col in cols:
-        if col not in dolcols and col != group_by_col:
+        if col not in list(dolcols.values()) and col != group_by_col:
             if (col not in linked_cols.keys()) and (col not in linked_cols.values()):
                 query = f"select distinct {col} from {tb_name}"
                 options = get_data(query).squeeze().sort_values().to_list()
@@ -116,9 +117,9 @@ def filter_sidebar(filters, linked_cols, special_treat):
     return selections
 
 def select_dollars (dolcols):
-    options = [col.replace('_',' ') for col in dolcols]
-    dollars = st.radio('Show only awards made to:', options = options).replace(' ','_')
-    return dollars
+    options = list(dolcols.keys())
+    dollars = st.radio('Show only awards made to:', options = options)
+    return dolcols[dollars]
 
 def select_dollars_or_percent():
     options = ['Dollars', 'Percentage of All Awards to Group Selected Above', 
@@ -127,17 +128,17 @@ def select_dollars_or_percent():
     return dollars_or_percent
     
 def get_table(cols, selections, dollars, dollars_or_percent):
-    cols_small = [col for col in cols if col not in dolcols and col != group_by_col]
+    cols_small = [col for col in cols if col not in dolcols.values() and col != group_by_col]
 
     filters = {}
     for col in cols_small:
         if col in selections.keys() and len(selections[col])>0:
             filters[col] = selections[col]
     if len(filters)>0: 
-        filters = {k:tuple(v) for k,v in filters.items() if len(v)>0}
+        filters = {k:tuple(v) for k,v in filters.items()}
 
     if dollars_or_percent == 'Percentage of Awards to All Awardees':
-        dolcols_str = f'sum({dollars}) as {dollars}, sum(ALL_AWARDEES) as ALL_AWARDEES, sum({dollars})/sum(ALL_AWARDEES) as PERCENT'
+        dolcols_str = f'sum({dollars}) as {dollars}, sum(ALL_AWARDEES) as ALL_AWARDS, sum({dollars})/sum(ALL_AWARDEES) as PERCENT'
     elif dollars_or_percent == 'Percentage of All Awards to Group Selected Above':
         dolcols_str = f'''sum({dollars}) as {dollars}, 
             sum(iff(SET_ASIDE_TYPE in {filters['SET_ASIDE_TYPE']}, {dollars},0)) as {dollars}_with_Set_Aside_Type, 
@@ -146,44 +147,53 @@ def get_table(cols, selections, dollars, dollars_or_percent):
         dolcols_str = f'sum({dollars}) as {dollars}'
     
     if dollars_or_percent == 'Percentage of All Awards to Group Selected Above':
-        where_str = ''.join([f'{k} in {v} and ' for k,v in filters.items() if k != 'SET_ASIDE_TYPE'])
+        where_str = ''.join([f'{k} in (%({k})s) and ' for k,v in filters.items() if k != 'SET_ASIDE_TYPE'])
     else:
-        where_str = ''.join([f'{k} in {v} and ' for k,v in filters.items()])      
+        where_str = ''.join([f'{k} in (%({k})s) and ' for k,v in filters.items()])      
     
     query = f"select {group_by_col}, {dolcols_str} from {tb_name} where {where_str} 1=1 group by {group_by_col} order by 1"
    
-    table = get_data(query).set_index(group_by_col)
+    table = get_data(query, filters).set_index(group_by_col)
     return table
 
 def display_dollars (table, dollars):
     dollars_srs = table[dollars]
-    dollars_srs.name = dollars.replace('_',' ')
+    cols_styled = {v:k for k,v in dolcols.items()}
+    cols_styled['FISCAL_YEAR'] = 'Fiscal Year'
+    cols_styled['y'] = cols_styled[dollars]
+
     pal = ["#002e6d", "#cc0000", "#969696", "#007dbc", "#197e4e", "#f1c400"]
 
     if ~dollars_srs.empty:
-        fig=px.bar(dollars_srs,x=dollars_srs.index,y=dollars_srs,color_discrete_sequence=pal, labels={'y':dollars_srs.name})
+        fig=px.bar(dollars_srs,x=dollars_srs.index,y=dollars_srs,color_discrete_sequence=pal, labels=cols_styled)
         st.plotly_chart(fig)
-        st.write(dollars_srs.to_frame().reset_index().style.format({dollars_srs.name: '${:,.0f}'}).hide(axis="index")\
+        st.write(dollars_srs.to_frame().reset_index().rename(columns=cols_styled)\
+                   .style.format({cols_styled[dollars]: '${:,.0f}'}).hide(axis="index")\
                    .to_html(),unsafe_allow_html=True)
     else:
         st.write('No Data.')
 
 def display_pct (table, dollars):  
-    table = table.rename(columns = lambda c:c.replace('_',' '))
+    cols_styled = {v:k for k,v in dolcols.items()}
+    cols_styled['FISCAL_YEAR'] = 'Fiscal Year'
+    cols_styled['PERCENT'] = 'Percent'
+    cols_styled[f'{dollars}_WITH_SET_ASIDE_TYPE'] = f'{cols_styled[dollars]} with Set Aside Type'
+    cols_styled['ALL_AWARDS'] = 'All Awards with Set Aside Type'
     pal = ["#002e6d", "#cc0000", "#969696", "#007dbc", "#197e4e", "#f1c400"]
 
     def col_types(cols):
-        dict = {'PERCENT':'{:.2%}'}
+        dict = {'Percent':'{:.2%}'}
         for col in cols:
-            if col=='FISCAL_YEAR': pass
-            elif col!='PERCENT':  dict[col]='${:,.0f}'
+            if col=='Fiscal Year': pass
+            elif col!='Percent':  dict[col]='${:,.0f}'
         return dict
     
     if len(table) > 0:
-        fig=px.line(table,x=table.index,y=table['PERCENT'],color_discrete_sequence=pal)
+        fig=px.line(table,x=table.index,y=table['PERCENT'],color_discrete_sequence=pal, labels = cols_styled)
         st.plotly_chart(fig)
-        st.write(table.reset_index().style.format(col_types(table.columns.to_list())).hide(axis="index")\
-             .to_html(),unsafe_allow_html=True)
+        st.write(table.reset_index().rename(columns=cols_styled)\
+             .pipe(lambda df:df.style.format(col_types(df.columns.to_list())))\
+             .hide(axis="index").to_html(),unsafe_allow_html=True)
     else:
         st.write('No Data.')
 
