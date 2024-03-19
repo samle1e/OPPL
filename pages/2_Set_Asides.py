@@ -141,8 +141,8 @@ def get_table(cols, selections, dollars, dollars_or_percent):
         dolcols_str = f'sum({dollars}) as {dollars}, sum(ALL_AWARDEES) as ALL_AWARDS, sum({dollars})/sum(ALL_AWARDEES) as PERCENT'
     elif dollars_or_percent == 'Percentage of All Awards to Group Selected Above':
         dolcols_str = f'''sum({dollars}) as {dollars}, 
-            sum(iff(SET_ASIDE_TYPE in {filters['SET_ASIDE_TYPE']}, {dollars},0)) as {dollars}_with_Set_Aside_Type, 
-            sum(iff(SET_ASIDE_TYPE in {filters['SET_ASIDE_TYPE']}, {dollars},0)) / sum({dollars}) as Percent'''
+            sum(iff(SET_ASIDE_TYPE in (%(SET_ASIDE_TYPE)s), {dollars},0)) as {dollars}_with_Set_Aside_Type, 
+            sum(iff(SET_ASIDE_TYPE in (%(SET_ASIDE_TYPE)s), {dollars},0)) / sum({dollars}) as Percent'''
     else:
         dolcols_str = f'sum({dollars}) as {dollars}'
     
