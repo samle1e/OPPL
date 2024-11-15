@@ -6,6 +6,7 @@ import streamlit as st
 import plotly.express as px
 import re
 from io import StringIO
+from time import localtime
 from datetime import datetime
 from snowflake.connector import connect
 
@@ -25,7 +26,25 @@ hide_streamlit_style = """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
 
 start_year = 2010
-end_year = 2024
+
+# Fiscal year date adjustments function
+
+def determine_fiscal_year(month, year):
+    if month >= 10:
+        year = year + 1
+    else:
+        year = year
+    return year
+
+# Determine current calendar month and year to apply the above function
+
+def current_fiscal_year():  
+    t = list(localtime()) # Determines the current month and year
+    year = determine_fiscal_year(t[1], t[0])
+    return year
+
+end_year = current_fiscal_year()
+
 #%% connect to snowflake
 
 con = connect(**st.secrets.snowflake_credentials)
@@ -153,6 +172,6 @@ if __name__ == '__main__':
     
     st.caption("Enter DUNs or UEIs to the left, or upload a file with a list of DUNs or UEIs.")
     st.caption("The app automatically matches DUNs to UEIs and vice-versa based on a crosswalk from the April 2022 switchover.")
-    st.caption("Source: SBA Small Business Goaling Report for FY09-FY22, Preliminary SBGR for FY23, ATOM Feed for FY24.")
+    st.caption("Source: SBA Small Business Goaling Report for FY09-FY23, ATOM Feed for FY24-FY25.")
 
 # %%
